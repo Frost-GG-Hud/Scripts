@@ -2370,6 +2370,25 @@ local function validateFrostKey(inputKey)
     return false
 end
 
+pcall(function()
+    if isfile and delfile then
+        local oldKeyFiles = {
+            "FrostHub/key.txt",
+            "FrostHub/key.json",
+            "FrostHub/keys.txt",
+            "FrostHub/savedkey.txt",
+            "WindUI/FrostHub/key.txt",
+            "WindUI/FrostHub/key.json",
+            "WindUI/key.txt"
+        }
+        for _, filePath in ipairs(oldKeyFiles) do
+            if isfile(filePath) then
+                delfile(filePath)
+            end
+        end
+    end
+end)
+
 local Window = WindUI:CreateWindow({
     Title = "Frost Hub | Automation",
     Icon = "snowflake",
@@ -2388,7 +2407,7 @@ local Window = WindUI:CreateWindow({
         Title = "Frost Hub • Key System",
         Note = "Enter your key generated via Discord bot (/create key).",
         URL = "https://discord.com/oauth2/authorize?client_id=1550562639829274697&permissions=2147485696&scope=bot%20applications.commands",
-        SaveKey = true,
+        SaveKey = false,
     },
 })
 
