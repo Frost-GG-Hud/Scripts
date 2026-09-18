@@ -2360,6 +2360,80 @@ UtilsAutoSection:Toggle({
     end
 })
 
+local function getPlayerCash()
+    local sd = LocalPlayer:FindFirstChild("SavedData")
+    if sd and sd:FindFirstChild("Cash") and typeof(sd.Cash.Value) == "number" then
+        return sd.Cash.Value
+    end
+    local ls = LocalPlayer:FindFirstChild("leaderstats")
+    if ls and ls:FindFirstChild("Cash") and typeof(ls.Cash.Value) == "number" then
+        return ls.Cash.Value
+    end
+    return 0
+end
+
+local function getHatchLuckUpgradeDetails()
+    local plot = getPlayerPlot() or (workspace:FindFirstChild("Plots") and workspace.Plots:FindFirstChild("Plot"))
+    local pgui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pgui then return nil end
+
+    local maxBtn, maxCost
+    local singleBtn, singleCost
+
+    for _, g in ipairs(pgui:GetChildren()) do
+        if g:IsA("SurfaceGui") and g.Adornee and (not plot or g.Adornee:IsDescendantOf(plot)) then
+            if g.Name == "MaxUpgrade" or g.Name == "MaxUpgradeInput" then
+                local btn = g:FindFirstChild("Purchase")
+                if btn and btn:IsA("GuiButton") then maxBtn = btn end
+                for _, d in ipairs(g:GetDescendants()) do
+                    if d:IsA("TextLabel") and string.find(d.Text, "%$") then
+                        local parsed = parseValueString(d.Text)
+                        if parsed and parsed > 0 then
+                            maxCost = parsed
+                            break
+                        end
+                    end
+                end
+            elseif g.Name == "Upgrade" or g.Name == "UpgradeInput" then
+                local btn = g:FindFirstChild("Purchase")
+                if btn and btn:IsA("GuiButton") then singleBtn = btn end
+                for _, d in ipairs(g:GetDescendants()) do
+                    if d:IsA("TextLabel") and string.find(d.Text, "%$") then
+                        local parsed = parseValueString(d.Text)
+                        if parsed and parsed > 0 then
+                            singleCost = parsed
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Fallback calculation via ReplicatedStorage.GameData.HatchLuck
+    if not maxCost or maxCost <= 0 then
+        pcall(function()
+            local rep = game:GetService("ReplicatedStorage")
+            local gd = rep:FindFirstChild("GameData")
+            if gd and gd:FindFirstChild("HatchLuck") then
+                local hl = require(gd.HatchLuck)
+                local sd = LocalPlayer:FindFirstChild("SavedData")
+                local curUpgrades = sd and sd:FindFirstChild("HatchUpgrades") and sd.HatchUpgrades.Value or 0
+                if hl.GetPrice then
+                    singleCost = singleCost or hl.GetPrice(curUpgrades)
+                end
+            end
+        end)
+    end
+
+    return {
+        MaxButton = maxBtn,
+        MaxCost = maxCost,
+        SingleButton = singleBtn,
+        SingleCost = singleCost
+    }
+end
+
 -- Background runner for Utilities automation
 task.spawn(function()
     while true do
@@ -2392,27 +2466,24 @@ task.spawn(function()
         end
         if UtilitiesConfig.AutoHatchLuck then
             pcall(function()
-                local pgui = LocalPlayer:FindFirstChild("PlayerGui")
-                if pgui then
-                    local maxUp = pgui:FindFirstChild("MaxUpgradeInput") or pgui:FindFirstChild("MaxUpgrade")
-                    local maxBtn = maxUp and maxUp:FindFirstChild("Purchase")
-                    if maxBtn and maxBtn:IsA("GuiButton") then
-                        if firesignal then
-                            firesignal(maxBtn.Activated)
-                        else
-                            local conns = getconnections and getconnections(maxBtn.Activated) or {}
-                            for _, c in ipairs(conns) do pcall(c.Function) end
-                        end
+                local cash = getPlayerCash()
+                local details = getHatchLuckUpgradeDetails()
+                if not details then return end
+
+                -- Strictly verify the player has enough money before attempting to purchase the maximum Hatch Luck upgrade
+                if details.MaxButton and details.MaxCost and cash >= details.MaxCost then
+                    if firesignal then
+                        firesignal(details.MaxButton.Activated)
+                    else
+                        local conns = getconnections and getconnections(details.MaxButton.Activated) or {}
+                        for _, c in ipairs(conns) do pcall(c.Function) end
                     end
-                    local up = pgui:FindFirstChild("UpgradeInput") or pgui:FindFirstChild("Upgrade")
-                    local upBtn = up and up:FindFirstChild("Purchase")
-                    if upBtn and upBtn:IsA("GuiButton") then
-                        if firesignal then
-                            firesignal(upBtn.Activated)
-                        else
-                            local conns = getconnections and getconnections(upBtn.Activated) or {}
-                            for _, c in ipairs(conns) do pcall(c.Function) end
-                        end
+                elseif details.SingleButton and details.SingleCost and cash >= details.SingleCost then
+                    if firesignal then
+                        firesignal(details.SingleButton.Activated)
+                    else
+                        local conns = getconnections and getconnections(details.SingleButton.Activated) or {}
+                        for _, c in ipairs(conns) do pcall(c.Function) end
                     end
                 end
             end)
