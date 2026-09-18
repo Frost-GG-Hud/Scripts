@@ -43,7 +43,8 @@
       "duration": "1 Day",
       "created_by": "TestSystem",
       "created_by_name": "Tester",
-      "status": "Active"
+      "status": "Revoked",
+      "revoked_at": 1789756710
     }
   ]
 }
