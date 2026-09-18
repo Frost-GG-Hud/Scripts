@@ -21,12 +21,19 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
   - **Walk (Pathfinding)**: PathfindingService with smart fence/gate routing and auto-jumping.
   - **Walk (Direct)**: Direct line-of-sight sprint towards target.
   - **Tween (Smooth)**: CFrame interpolation with anti-gravity stabilization and optional noclip.
-- **🔔 Discord Webhook Integration**:
+- **🔔 Discord Webhook Integration (Single Alert per Egg)**:
   - Dedicated **Webhook** tab to enter your channel's webhook URL.
   - Test button to verify connection.
-  - **Egg Caught Alerts**: Sends egg type, egg luck, distance, speed, and session count.
-  - **Egg Deposited Alerts**: Confirms successful plot delivery.
-  - **Hatch & Income Alerts**: Reports hatched pet name, rarity, income/s generated (from `GameData.Pets`), weight, and mutation.
+  - **Single Notification Policy**: Dispatches strictly **one consolidated webhook notification per egg farmed**, eliminating duplicate alerts.
+  - **Comprehensive Embed Data**:
+    - **🍀 Egg Luck**: Formatted luck multiplier and exact value (e.g. `1.5B (1500000000)`).
+    - **🥚 Egg Type**: Precise name of the collected egg.
+    - **📏 Distance**: Travel distance from pickup position to target.
+    - **🏆 Total Eggs Farmed**: Accurate running count of eggs farmed in the current session.
+    - **👤 Farmer Info**: In-game DisplayName and Username (ideal for multi-account farming).
+    - **⏱️ Session Time & Pace**: Active session duration and real-time farming rate (`eggs/hr`).
+    - **🚀 Movement Diagnostics**: Active engine and speed used.
+    - **🎨 Dynamic Luck Theming**: Embed color dynamically shifts according to egg rarity and luck tier.
 
 ### 📥 Load Script
 
