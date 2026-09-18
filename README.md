@@ -43,12 +43,10 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
     - **Auto Collect Index**: Continuously and automatically claims available Index pet discovery rewards.
     - **Auto Rebirth**: Automatically checks both Cash and Pet requirements against game data (`Rebirths` and `General.RebirthRequirements`) before triggering Rebirth, completely eliminating notification spam when requirements are unmet.
     - **Auto Upgrade Hatch Luck**: Automatically buys Hatch Luck upgrades on your plot whenever affordable.
-- **⚡ Unified Speed Control (1 to 400)**:
-  - Single **Movement Speed** slider that automatically governs both **Walk** (`Humanoid.WalkSpeed`) and **Tween** (studs/s glide) navigation.
-- **🚀 Movement Engines**:
-  - **Walk (Pathfinding)**: PathfindingService with smart fence/gate routing and auto-jumping.
-  - **Walk (Direct)**: Direct line-of-sight sprint towards target.
-  - **Tween (Smooth)**: CFrame interpolation with anti-gravity stabilization and optional noclip.
+- **⚡ Instant Movement Speed Control (0 to 375 studs/s)**:
+  - Responsive **Movement Speed** slider (0 to 375 studs/s) that applies changes instantly to live tween navigation.
+- **🚀 Standard Tween Navigation Engine**:
+  - Smooth CFrame interpolation with anti-gravity stabilization and noclip as the standard and only movement engine for Auto Collect Eggs.
 - **🔔 Discord Webhook Integration**:
   - Dedicated **Webhook** tab to enter your channel's webhook URL with a **Test Webhook Notification** button.
   - **Default Safeguards & Stats**:
