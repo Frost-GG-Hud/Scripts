@@ -64,7 +64,10 @@
       "created_by_name": "cupidat",
       "claimed_by": 1303832901540122656,
       "expired_notified": false,
-      "status": "Active"
+      "status": "Revoked",
+      "revoked_at": 1789763664,
+      "revoked_by": 1303832901540122656,
+      "revoked_by_name": "cupidat"
     },
     {
       "key": "FROST-6H-7ER6-FLYQ",
