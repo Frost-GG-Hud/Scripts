@@ -1,27 +1,27 @@
 # ❄️ Frost Hub - Scripts Repository
 
-Advanced gameplay automation, testing, and utility Luau scripts for Roblox.
+Advanced gameplay automation, testing, and webhook integration suite for Roblox.
 
 ---
 
 ## 🥚 Auto Collect Eggs (WindUI Edition)
 
-A high-performance prototyping system built on [WindUI](https://github.com/Footagesus/WindUI) with acrylic glassmorphism, responsive sidebar tabs, and multi-modal movement engines:
+A high-performance prototyping system built on [WindUI](https://github.com/Footagesus/WindUI) with acrylic glassmorphism, responsive sidebar tabs, unified speed control, and Discord webhooks:
 
 ### ✨ Features
-- **🎨 WindUI Design**: Translucent dark acrylic theme, tabbed navigation, smooth animations, resizable window, and notifications.
-- **⚡ Multiple Movement Systems**:
-  - **Walk (Pathfinding)**: Uses PathfindingService with waypoint tracking and automatic obstacle hopping.
-  - **Walk (Direct)**: Straight-line speed sprint towards target.
-  - **Tween (Smooth Glide)**: Smooth CFrame interpolation with anti-gravity stabilization and optional noclip.
-- **🏎️ Configurable Speeds (1 to 400)**:
-  - **Walk Speed Slider**: Adjusts Humanoid walk speed from 1 to 400 studs/s.
-  - **Tween Speed Slider**: Configures glide speed from 1 to 400 studs/s.
-- **🛡️ Server-Validated Loop**:
-  - Detects eggs from server-replicated state (workspace.RenderedEggs).
-  - Triggers standard ProximityPrompt collection.
-  - Verifies carried state in player.Basket.
-  - Automatically navigates to player's designated plot baseplate and confirms deposit.
+- **🎨 WindUI Interface**: Dark acrylic glassmorphism, fluid micro-animations, resizable window, and notifications.
+- **⚡ Unified Speed Control (1 to 400)**:
+  - Single **Movement Speed** slider that automatically governs both **Walk** (Humanoid.WalkSpeed) and **Tween** (studs/s glide) navigation.
+- **🏃 Movement Engines**:
+  - **Walk (Pathfinding)**: PathfindingService with smart fence/gate routing and auto-jumping.
+  - **Walk (Direct)**: Direct line-of-sight sprint towards target.
+  - **Tween (Smooth)**: CFrame interpolation with anti-gravity stabilization and optional noclip.
+- **🔔 Discord Webhook Integration**:
+  - Dedicated **Webhook** tab to enter your channel's webhook URL.
+  - Test button to verify connection.
+  - **Egg Caught Alerts**: Sends egg type, distance, speed, and session count.
+  - **Egg Deposited Alerts**: Confirms successful plot delivery.
+  - **Hatch & Income Alerts**: Reports hatched pet name, rarity, income/s generated (from GameData.Pets), weight, and mutation.
 
 ### 🚀 Load Script
 
