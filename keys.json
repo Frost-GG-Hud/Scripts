@@ -133,6 +133,17 @@
       "assigned_to": 1092375734988832798,
       "assigned_to_name": "zzz_gl",
       "status": "Active"
+    },
+    {
+      "key": "FROST-6H-QWRH-3M5L",
+      "created_at": 1789769061,
+      "expires_at": 1789790661,
+      "duration": "6 hours",
+      "created_by": 1328155529939521688,
+      "created_by_name": "sillygoosr.",
+      "claimed_by": 1328155529939521688,
+      "expired_notified": false,
+      "status": "Active"
     }
   ]
 }
