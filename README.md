@@ -6,15 +6,15 @@ Advanced gameplay automation, testing, and webhook integration suite for Roblox.
 
 ## 🥚 Auto Collect Eggs (WindUI Edition)
 
-A high-performance prototyping system built on [WindUI](https://github.com/Footagesus/WindUI) with acrylic glassmorphism, responsive sidebar tabs, unified speed control, value-based egg filtering, and Discord webhooks.
+A high-performance prototyping system built on [WindUI](https://github.com/Footagesus/WindUI) with acrylic glassmorphism, responsive sidebar tabs, unified speed control, Egg Luck filtering, and Discord webhooks.
 
 ### ✨ Features
 - **💎 WindUI Interface**: Dark acrylic glassmorphism, fluid micro-animations, resizable window, and notifications.
-- **🎯 Collect by Value (NEW)**:
-  - Toggle on/off directly in the **Auto Collect** tab.
-  - Enter custom minimum value thresholds using flexible shorthand formats (e.g. `100`, `2k`, `100k`, `1m`, `300b`).
-  - Automatically calculates expected income per second generated after hatching (and egg luck multipliers) using `ReplicatedStorage.GameData`.
-  - Filters out lower-tier eggs, prioritizing and collecting only high-value eggs exceeding your threshold.
+- **🍀 Egg Luck Filtering (NEW)**:
+  - Toggle **Collect by Luck** directly in the **Auto Collect** tab.
+  - Set a minimum luck threshold using the **Egg Luck** input box with flexible shorthand formats (e.g., `100`, `2k`, `1m`, `300b`).
+  - Each egg on the map has its own luck value (e.g. Slime Egg = 1k, Skull Egg = 250k, Flaming Egg = 1m, Sinister Egg = 3m, Galaxy Egg = 1.5b, Blackhole Egg = 100b).
+  - The system filters out any eggs with less than the entered luck value and only collects eggs with equal to or higher luck (e.g., entering `1m` collects only eggs with $\ge 1,000,000$ luck).
 - **⚡ Unified Speed Control (1 to 400)**:
   - Single **Movement Speed** slider that automatically governs both **Walk** (`Humanoid.WalkSpeed`) and **Tween** (studs/s glide) navigation.
 - **🚀 Movement Engines**:
@@ -24,7 +24,7 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
 - **🔔 Discord Webhook Integration**:
   - Dedicated **Webhook** tab to enter your channel's webhook URL.
   - Test button to verify connection.
-  - **Egg Caught Alerts**: Sends egg type, distance, speed, and session count.
+  - **Egg Caught Alerts**: Sends egg type, egg luck, distance, speed, and session count.
   - **Egg Deposited Alerts**: Confirms successful plot delivery.
   - **Hatch & Income Alerts**: Reports hatched pet name, rarity, income/s generated (from `GameData.Pets`), weight, and mutation.
 
