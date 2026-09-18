@@ -1,9 +1,14 @@
 --[[
     ❄️ Frost Hub - Auto Collect Eggs (WindUI Edition)
-    Advanced gameplay automation & testing system with Egg Luck filtering and Discord webhooks.
+    Advanced gameplay automation & testing system with Egg Luck filtering, live Egg Panel, and Discord webhooks.
     
     Features:
     - Built on WindUI with acrylic blur, custom themes, tabs, and smooth animations
+    - Egg Panel (Live Radar & Reset Tracker):
+        • Displays every egg currently available in the game
+        • Shows egg type, individual luck value, and distance to player
+        • Live countdown timer displaying time until eggs reset or refresh
+        • Fast search bar and rarity filter pills (Any, Divine, Ethereal, Mythic, Legendary, Epic, Rare, Common)
     - Egg Luck Filtering:
         • Filters eggs by minimum luck using flexible shorthand formats (e.g. 100, 2k, 1m, 300b)
         • Only collects eggs with equal to or higher luck than the entered threshold
@@ -13,8 +18,7 @@
         • Walk (Direct) - Straight-line speed walk
         • Tween (Smooth) - Gliding CFrame interpolation with anti-fall & noclip
     - Discord Webhook System:
-        • Real-time notifications for egg catches, deposits, and hatch events
-        • Hatch alerts with pet name, rarity, income/sec generated, weight, and mutation
+        • Strictly ONE consolidated notification per egg farmed (includes luck, type, distance, total count, farmer stats)
     - Server-validated loop (RenderedEggs & player.Basket confirmation)
 --]]
 
@@ -728,6 +732,594 @@ if hatchRemote then
 end
 
 --------------------------------------------------------------------------------
+-- EGG PANEL SUBSYSTEM (Live Radar & Reset Tracker)
+--------------------------------------------------------------------------------
+local RARITY_COLORS = {
+    Ethereal  = Color3.fromRGB(168, 85, 247),  -- Cosmic Purple
+    Divine    = Color3.fromRGB(59, 130, 246),   -- Celestial Blue
+    Mythic    = Color3.fromRGB(239, 68, 68),    -- Fiery Red
+    Legendary = Color3.fromRGB(245, 158, 11),   -- Golden Amber
+    Epic      = Color3.fromRGB(192, 132, 252),  -- Violet
+    Rare      = Color3.fromRGB(56, 189, 248),   -- Cyan
+    Common    = Color3.fromRGB(156, 163, 175),  -- Slate Gray
+}
+
+local function getEggResetTimeText()
+    local text = ""
+    pcall(function()
+        local et = LocalPlayer.PlayerGui:FindFirstChild("Main")
+            and LocalPlayer.PlayerGui.Main:FindFirstChild("EggTracker")
+        if et and et:FindFirstChild("Timer") then
+            if not et.Visible then
+                et.Position = UDim2.new(999, 0, 999, 0)
+                et.Visible = true
+            end
+            text = et.Timer.Text
+        end
+    end)
+
+    if text ~= "" then
+        local ms = string.match(text, "(%d+:%d+)")
+        if ms then
+            local mins, secs = string.match(ms, "(%d+):(%d+)")
+            return string.format("%dm %02ds", tonumber(mins) or 0, tonumber(secs) or 0)
+        end
+        return text
+    end
+
+    local dn = nil
+    pcall(function()
+        dn = require(ReplicatedStorage.GameServices.DayNight)
+    end)
+    if dn and dn.SecondsUntilNextPhase then
+        local sec = math.max(0, math.floor(dn.SecondsUntilNextPhase()))
+        return string.format("%dm %02ds", math.floor(sec / 60), sec % 60)
+    end
+    return "Unknown"
+end
+
+local function getActiveEggData()
+    local eggsFolder = workspace:FindFirstChild("RenderedEggs")
+    local hrp = getHRP()
+    local playerPos = hrp and hrp.Position or Vector3.zero
+
+    local counts = {}
+    local nearestDist = {}
+
+    if eggsFolder then
+        for _, eggModel in ipairs(eggsFolder:GetChildren()) do
+            if eggModel:IsA("Model") then
+                local name = eggModel.Name
+                counts[name] = (counts[name] or 0) + 1
+
+                local primary = eggModel.PrimaryPart or eggModel:FindFirstChildWhichIsA("BasePart")
+                if primary then
+                    local dist = (primary.Position - playerPos).Magnitude
+                    if not nearestDist[name] or dist < nearestDist[name] then
+                        nearestDist[name] = dist
+                    end
+                end
+            end
+        end
+    end
+
+    local GameDataEggs = nil
+    pcall(function()
+        local gd = ReplicatedStorage:FindFirstChild("GameData")
+        if gd and gd:FindFirstChild("Eggs") then
+            GameDataEggs = require(gd.Eggs)
+        end
+    end)
+
+    local list = {}
+    for eggName, count in pairs(counts) do
+        local gData = GameDataEggs and GameDataEggs[eggName]
+        local luck = gData and gData.Luck or EggLuckCache[eggName] or 1
+        local rarity = gData and gData.Rarity or "Common"
+        local img = gData and gData.Image or ""
+
+        table.insert(list, {
+            Name = eggName,
+            Count = count,
+            Luck = luck,
+            Rarity = rarity,
+            Image = img,
+            Distance = math.floor(nearestDist[eggName] or 0)
+        })
+    end
+
+    table.sort(list, function(a, b)
+        if a.Luck ~= b.Luck then
+            return a.Luck > b.Luck
+        end
+        return a.Distance < b.Distance
+    end)
+
+    return list
+end
+
+local EggPanel = {
+    Gui = nil,
+    MainFrame = nil,
+    IsOpen = false,
+    SearchQuery = "",
+    ActiveFilter = "Any",
+    ResetLabel = nil,
+    SearchBox = nil,
+    FilterButtons = {},
+    CardScroll = nil,
+    LastEggList = {},
+    NextResetText = "Loading...",
+    UpdateCallback = nil,
+}
+
+function EggPanel:Init()
+    if self.Gui then
+        self.Gui:Destroy()
+        self.Gui = nil
+    end
+
+    local parentGui = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "FrostHub_EggPanelGui"
+    gui.ResetOnSpawn = false
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.Enabled = false
+    gui.Parent = parentGui
+    self.Gui = gui
+
+    local main = Instance.new("Frame")
+    main.Name = "MainFrame"
+    main.Size = UDim2.new(0, 360, 0, 520)
+    main.Position = UDim2.new(0.5, 40, 0.5, -260)
+    main.BackgroundColor3 = Color3.fromRGB(11, 20, 16)
+    main.BorderSizePixel = 0
+    main.ClipsDescendants = true
+    main.Parent = gui
+    self.MainFrame = main
+
+    local mainCorner = Instance.new("UICorner")
+    mainCorner.CornerRadius = UDim.new(0, 10)
+    mainCorner.Parent = main
+
+    local mainStroke = Instance.new("UIStroke")
+    mainStroke.Color = Color3.fromRGB(28, 55, 42)
+    mainStroke.Thickness = 1.4
+    mainStroke.Transparency = 0.25
+    mainStroke.Parent = main
+
+    -- 1. Top Bar (Draggable)
+    local topBar = Instance.new("Frame")
+    topBar.Name = "TopBar"
+    topBar.Size = UDim2.new(1, 0, 0, 38)
+    topBar.BackgroundColor3 = Color3.fromRGB(8, 15, 12)
+    topBar.BorderSizePixel = 0
+    topBar.Parent = main
+
+    local topIcon = Instance.new("TextLabel")
+    topIcon.Text = "❄️"
+    topIcon.Size = UDim2.new(0, 24, 1, 0)
+    topIcon.Position = UDim2.new(0, 10, 0, 0)
+    topIcon.BackgroundTransparency = 1
+    topIcon.TextSize = 14
+    topIcon.Parent = topBar
+
+    local topTitle = Instance.new("TextLabel")
+    topTitle.Text = "FROST HUB | EGG PANEL"
+    topTitle.Size = UDim2.new(1, -75, 1, 0)
+    topTitle.Position = UDim2.new(0, 34, 0, 0)
+    topTitle.BackgroundTransparency = 1
+    topTitle.TextColor3 = Color3.fromRGB(220, 245, 235)
+    topTitle.Font = Enum.Font.GothamBold
+    topTitle.TextSize = 12
+    topTitle.TextXAlignment = Enum.TextXAlignment.Left
+    topTitle.Parent = topBar
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Text = "✕"
+    closeBtn.Size = UDim2.new(0, 24, 0, 24)
+    closeBtn.Position = UDim2.new(1, -30, 0.5, -12)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(18, 30, 24)
+    closeBtn.TextColor3 = Color3.fromRGB(180, 200, 190)
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 11
+    closeBtn.Parent = topBar
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 6)
+    closeCorner.Parent = closeBtn
+
+    closeBtn.MouseButton1Click:Connect(function()
+        self:Close()
+    end)
+
+    -- Draggable TopBar logic
+    local dragging = false
+    local dragStart, startPos
+    topBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = main.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    -- 2. SubBar (Egg Logs button & Reset Countdown)
+    local subBar = Instance.new("Frame")
+    subBar.Name = "SubBar"
+    subBar.Size = UDim2.new(1, -20, 0, 32)
+    subBar.Position = UDim2.new(0, 10, 0, 44)
+    subBar.BackgroundTransparency = 1
+    subBar.Parent = main
+
+    local logsBtn = Instance.new("TextButton")
+    logsBtn.Name = "EggLogsButton"
+    logsBtn.Text = "Egg Logs"
+    logsBtn.Size = UDim2.new(0, 90, 1, 0)
+    logsBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+    logsBtn.TextColor3 = Color3.fromRGB(10, 25, 18)
+    logsBtn.Font = Enum.Font.GothamBold
+    logsBtn.TextSize = 12
+    logsBtn.Parent = subBar
+    local logsCorner = Instance.new("UICorner")
+    logsCorner.CornerRadius = UDim.new(0, 6)
+    logsCorner.Parent = logsBtn
+
+    logsBtn.MouseButton1Click:Connect(function()
+        WindUI:Notify({
+            Title = "Egg Farming Stats",
+            Content = string.format("Session Total: %d eggs collected\nStatus: %s", State.EggsCollected, State.CurrentStatus),
+            Duration = 3,
+            Icon = "egg"
+        })
+    end)
+
+    local resetLabel = Instance.new("TextLabel")
+    resetLabel.Name = "ResetTimerLabel"
+    resetLabel.Text = "Next Reset: 0m 00s"
+    resetLabel.Size = UDim2.new(1, -100, 1, 0)
+    resetLabel.Position = UDim2.new(0, 100, 0, 0)
+    resetLabel.BackgroundTransparency = 1
+    resetLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
+    resetLabel.Font = Enum.Font.GothamBold
+    resetLabel.TextSize = 12.5
+    resetLabel.TextXAlignment = Enum.TextXAlignment.Right
+    resetLabel.Parent = subBar
+    self.ResetLabel = resetLabel
+
+    -- 3. Search Bar
+    local searchFrame = Instance.new("Frame")
+    searchFrame.Name = "SearchFrame"
+    searchFrame.Size = UDim2.new(1, -20, 0, 32)
+    searchFrame.Position = UDim2.new(0, 10, 0, 82)
+    searchFrame.BackgroundColor3 = Color3.fromRGB(16, 28, 23)
+    searchFrame.Parent = main
+    local searchCorner = Instance.new("UICorner")
+    searchCorner.CornerRadius = UDim.new(0, 6)
+    searchCorner.Parent = searchFrame
+    local searchStroke = Instance.new("UIStroke")
+    searchStroke.Color = Color3.fromRGB(30, 55, 42)
+    searchStroke.Thickness = 1
+    searchStroke.Parent = searchFrame
+
+    local searchBox = Instance.new("TextBox")
+    searchBox.Name = "SearchBox"
+    searchBox.Size = UDim2.new(1, -65, 1, 0)
+    searchBox.Position = UDim2.new(0, 10, 0, 0)
+    searchBox.BackgroundTransparency = 1
+    searchBox.PlaceholderText = "Search egg or rarity..."
+    searchBox.PlaceholderColor3 = Color3.fromRGB(110, 140, 125)
+    searchBox.TextColor3 = Color3.fromRGB(240, 250, 245)
+    searchBox.Font = Enum.Font.GothamMedium
+    searchBox.TextSize = 11.5
+    searchBox.TextXAlignment = Enum.TextXAlignment.Left
+    searchBox.ClearTextOnFocus = false
+    searchBox.Parent = searchFrame
+    self.SearchBox = searchBox
+
+    local clearBtn = Instance.new("TextButton")
+    clearBtn.Name = "ClearButton"
+    clearBtn.Text = "Clear"
+    clearBtn.Size = UDim2.new(0, 46, 0, 22)
+    clearBtn.Position = UDim2.new(1, -50, 0.5, -11)
+    clearBtn.BackgroundColor3 = Color3.fromRGB(24, 40, 32)
+    clearBtn.TextColor3 = Color3.fromRGB(180, 205, 195)
+    clearBtn.Font = Enum.Font.GothamMedium
+    clearBtn.TextSize = 10.5
+    clearBtn.Parent = searchFrame
+    local clearCorner = Instance.new("UICorner")
+    clearCorner.CornerRadius = UDim.new(0, 4)
+    clearCorner.Parent = clearBtn
+
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        self.SearchQuery = string.lower(searchBox.Text or "")
+        self:RenderCards()
+    end)
+    clearBtn.MouseButton1Click:Connect(function()
+        searchBox.Text = ""
+        self.SearchQuery = ""
+        self:RenderCards()
+    end)
+
+    -- 4. Filter Pills Bar (Horizontal ScrollingFrame)
+    local filterScroll = Instance.new("ScrollingFrame")
+    filterScroll.Name = "FilterScroll"
+    filterScroll.Size = UDim2.new(1, -20, 0, 28)
+    filterScroll.Position = UDim2.new(0, 10, 0, 120)
+    filterScroll.BackgroundTransparency = 1
+    filterScroll.ScrollBarThickness = 0
+    filterScroll.CanvasSize = UDim2.new(0, 480, 0, 0)
+    filterScroll.ScrollingDirection = Enum.ScrollingDirection.X
+    filterScroll.Parent = main
+
+    local filterLayout = Instance.new("UIListLayout")
+    filterLayout.FillDirection = Enum.FillDirection.Horizontal
+    filterLayout.Padding = UDim.new(0, 6)
+    filterLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    filterLayout.Parent = filterScroll
+
+    local filters = { "Any", "Ethereal", "Divine", "Mythic", "Legendary", "Epic", "Rare", "Common" }
+    self.FilterButtons = {}
+
+    for _, fName in ipairs(filters) do
+        local pill = Instance.new("TextButton")
+        pill.Name = "Pill_" .. fName
+        pill.Text = fName
+        pill.Size = UDim2.new(0, fName == "Any" and 48 or 62, 0, 24)
+        pill.Font = Enum.Font.GothamBold
+        pill.TextSize = 10.5
+        pill.Parent = filterScroll
+        local pCorner = Instance.new("UICorner")
+        pCorner.CornerRadius = UDim.new(0, 12)
+        pCorner.Parent = pill
+
+        self.FilterButtons[fName] = pill
+
+        local function updatePillVisual()
+            if self.ActiveFilter == fName then
+                pill.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+                pill.TextColor3 = Color3.fromRGB(10, 25, 18)
+            else
+                pill.BackgroundColor3 = Color3.fromRGB(18, 30, 25)
+                pill.TextColor3 = Color3.fromRGB(180, 200, 190)
+            end
+        end
+        updatePillVisual()
+
+        pill.MouseButton1Click:Connect(function()
+            self.ActiveFilter = fName
+            for _, btn in pairs(self.FilterButtons) do
+                local isActive = (btn.Name == "Pill_" .. fName)
+                btn.BackgroundColor3 = isActive and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(18, 30, 25)
+                btn.TextColor3 = isActive and Color3.fromRGB(10, 25, 18) or Color3.fromRGB(180, 200, 190)
+            end
+            self:RenderCards()
+        end)
+    end
+
+    -- 5. Card Container (Vertical ScrollingFrame)
+    local cardScroll = Instance.new("ScrollingFrame")
+    cardScroll.Name = "CardScroll"
+    cardScroll.Size = UDim2.new(1, -20, 1, -162)
+    cardScroll.Position = UDim2.new(0, 10, 0, 154)
+    cardScroll.BackgroundTransparency = 1
+    cardScroll.ScrollBarThickness = 3
+    cardScroll.ScrollBarImageColor3 = Color3.fromRGB(40, 75, 58)
+    cardScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    cardScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    cardScroll.Parent = main
+    self.CardScroll = cardScroll
+
+    local cardLayout = Instance.new("UIListLayout")
+    cardLayout.Padding = UDim.new(0, 6)
+    cardLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    cardLayout.Parent = cardScroll
+end
+
+function EggPanel:RenderCards()
+    if not self.CardScroll then return end
+
+    for _, child in ipairs(self.CardScroll:GetChildren()) do
+        if child:IsA("Frame") or child:IsA("TextLabel") then
+            child:Destroy()
+        end
+    end
+
+    local eggs = self.LastEggList or {}
+    local query = self.SearchQuery or ""
+    local filter = self.ActiveFilter or "Any"
+
+    local visibleCount = 0
+    for i, egg in ipairs(eggs) do
+        local matchesFilter = (filter == "Any") or (string.lower(egg.Rarity) == string.lower(filter))
+        local matchesSearch = (query == "")
+            or string.find(string.lower(egg.Name), query, 1, true)
+            or string.find(string.lower(egg.Rarity), query, 1, true)
+
+        if matchesFilter and matchesSearch then
+            visibleCount = visibleCount + 1
+
+            local card = Instance.new("Frame")
+            card.Name = "EggCard_" .. egg.Name
+            card.Size = UDim2.new(1, 0, 0, 56)
+            card.BackgroundColor3 = Color3.fromRGB(15, 26, 21)
+            card.BorderSizePixel = 0
+            card.LayoutOrder = i
+            card.Parent = self.CardScroll
+
+            local cCorner = Instance.new("UICorner")
+            cCorner.CornerRadius = UDim.new(0, 8)
+            cCorner.Parent = card
+
+            local cStroke = Instance.new("UIStroke")
+            cStroke.Color = Color3.fromRGB(26, 48, 38)
+            cStroke.Thickness = 1
+            cStroke.Parent = card
+
+            -- Left vertical color accent bar
+            local accent = Instance.new("Frame")
+            accent.Name = "RarityAccent"
+            accent.Size = UDim2.new(0, 3.5, 1, -12)
+            accent.Position = UDim2.new(0, 4, 0, 6)
+            accent.BackgroundColor3 = RARITY_COLORS[egg.Rarity] or Color3.fromRGB(46, 204, 113)
+            accent.BorderSizePixel = 0
+            accent.Parent = card
+            local aCorner = Instance.new("UICorner")
+            aCorner.CornerRadius = UDim.new(0, 2)
+            aCorner.Parent = accent
+
+            -- Egg Thumbnail Image
+            local iconHolder = Instance.new("Frame")
+            iconHolder.Name = "IconHolder"
+            iconHolder.Size = UDim2.new(0, 40, 0, 40)
+            iconHolder.Position = UDim2.new(0, 14, 0.5, -20)
+            iconHolder.BackgroundColor3 = Color3.fromRGB(20, 34, 28)
+            iconHolder.BorderSizePixel = 0
+            iconHolder.Parent = card
+            local iconCorner = Instance.new("UICorner")
+            iconCorner.CornerRadius = UDim.new(0, 6)
+            iconCorner.Parent = iconHolder
+
+            if egg.Image and egg.Image ~= "" then
+                local img = Instance.new("ImageLabel")
+                img.Image = egg.Image
+                img.Size = UDim2.new(0.85, 0, 0.85, 0)
+                img.Position = UDim2.new(0.075, 0, 0.075, 0)
+                img.BackgroundTransparency = 1
+                img.Parent = iconHolder
+            else
+                local fallbackTxt = Instance.new("TextLabel")
+                fallbackTxt.Text = "🥚"
+                fallbackTxt.Size = UDim2.new(1, 0, 1, 0)
+                fallbackTxt.BackgroundTransparency = 1
+                fallbackTxt.TextSize = 20
+                fallbackTxt.Parent = iconHolder
+            end
+
+            -- Egg Name & Details
+            local nameLabel = Instance.new("TextLabel")
+            nameLabel.Text = egg.Name
+            nameLabel.Size = UDim2.new(1, -170, 0, 20)
+            nameLabel.Position = UDim2.new(0, 62, 0, 8)
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.TextColor3 = Color3.fromRGB(245, 255, 250)
+            nameLabel.Font = Enum.Font.GothamBold
+            nameLabel.TextSize = 12.5
+            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            nameLabel.Parent = card
+
+            local subLabel = Instance.new("TextLabel")
+            subLabel.Text = string.format("%s • x%d In World • %d studs", egg.Rarity, egg.Count, egg.Distance)
+            subLabel.Size = UDim2.new(1, -170, 0, 16)
+            subLabel.Position = UDim2.new(0, 62, 0, 28)
+            subLabel.BackgroundTransparency = 1
+            subLabel.TextColor3 = RARITY_COLORS[egg.Rarity] or Color3.fromRGB(200, 150, 60)
+            subLabel.Font = Enum.Font.GothamMedium
+            subLabel.TextSize = 10
+            subLabel.TextXAlignment = Enum.TextXAlignment.Left
+            subLabel.Parent = card
+
+            -- Right-aligned Luck Value Badge
+            local luckValueLabel = Instance.new("TextLabel")
+            luckValueLabel.Text = formatValueString(egg.Luck) .. " Luck"
+            luckValueLabel.Size = UDim2.new(0, 100, 0, 20)
+            luckValueLabel.Position = UDim2.new(1, -106, 0, 8)
+            luckValueLabel.BackgroundTransparency = 1
+            luckValueLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
+            luckValueLabel.Font = Enum.Font.GothamBold
+            luckValueLabel.TextSize = 12.5
+            luckValueLabel.TextXAlignment = Enum.TextXAlignment.Right
+            luckValueLabel.Parent = card
+
+            local tierLabel = Instance.new("TextLabel")
+            tierLabel.Text = "Tier " .. egg.Rarity
+            tierLabel.Size = UDim2.new(0, 100, 0, 16)
+            tierLabel.Position = UDim2.new(1, -106, 0, 28)
+            tierLabel.BackgroundTransparency = 1
+            tierLabel.TextColor3 = Color3.fromRGB(140, 165, 155)
+            tierLabel.Font = Enum.Font.Gotham
+            tierLabel.TextSize = 9.5
+            tierLabel.TextXAlignment = Enum.TextXAlignment.Right
+            tierLabel.Parent = card
+        end
+    end
+
+    if visibleCount == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Text = "No eggs matching criteria."
+        empty.Size = UDim2.new(1, 0, 0, 40)
+        empty.BackgroundTransparency = 1
+        empty.TextColor3 = Color3.fromRGB(120, 150, 135)
+        empty.Font = Enum.Font.GothamMedium
+        empty.TextSize = 11.5
+        empty.Parent = self.CardScroll
+    end
+end
+
+function EggPanel:Refresh()
+    self.LastEggList = getActiveEggData()
+    self.NextResetText = getEggResetTimeText()
+
+    if self.ResetLabel then
+        self.ResetLabel.Text = "Next Reset: " .. self.NextResetText
+    end
+
+    if self.IsOpen then
+        self:RenderCards()
+    end
+
+    if self.UpdateCallback then
+        pcall(self.UpdateCallback, self.LastEggList, self.NextResetText)
+    end
+end
+
+function EggPanel:Open()
+    if not self.Gui then
+        self:Init()
+    end
+    self.Gui.Enabled = true
+    self.IsOpen = true
+    self:Refresh()
+end
+
+function EggPanel:Close()
+    if self.Gui then
+        self.Gui.Enabled = false
+    end
+    self.IsOpen = false
+end
+
+function EggPanel:Toggle()
+    if self.IsOpen then
+        self:Close()
+    else
+        self:Open()
+    end
+end
+
+function EggPanel:StartAutoUpdate()
+    task.spawn(function()
+        while true do
+            pcall(function()
+                self:Refresh()
+            end)
+            task.wait(1)
+        end
+    end)
+end
+
+--------------------------------------------------------------------------------
 -- WINDUI MODERN HUD CREATION
 --------------------------------------------------------------------------------
 pcall(function()
@@ -906,6 +1498,14 @@ ActionsSection:Button({
 })
 
 ActionsSection:Button({
+    Title = "Open Panel",
+    Desc = "Open the live Egg Panel showing all available eggs, luck values, and reset countdown",
+    Callback = function()
+        EggPanel:Open()
+    end
+})
+
+ActionsSection:Button({
     Title = "Reset Statistics",
     Desc = "Resets the session collected eggs counter to 0",
     Callback = function()
@@ -921,7 +1521,56 @@ ActionsSection:Button({
 })
 
 --------------------------------------------------------------------------------
--- TAB 2: MOVEMENT
+-- TAB 2: EGG PANEL
+--------------------------------------------------------------------------------
+local EggPanelTab = Window:Tab({
+    Title = "Egg Panel",
+    Icon = "layout-grid"
+})
+
+local EggPanelSection = EggPanelTab:Section({
+    Title = "Egg Panel",
+    Opened = true
+})
+
+EggPanelSection:Button({
+    Title = "Open Panel",
+    Desc = "Open the live Egg Panel showing all available eggs, luck values, and reset countdown",
+    Callback = function()
+        EggPanel:Open()
+    end
+})
+
+local EggPanelLiveStatus = EggPanelSection:Paragraph({
+    Title = "Live Egg Radar & Reset",
+    Desc = "Loading active egg counts and reset timer..."
+})
+
+EggPanel.UpdateCallback = function(eggList, resetTime)
+    pcall(function()
+        local totalAvailable = 0
+        local topEgg = "None"
+        local topLuck = 0
+        for _, egg in ipairs(eggList) do
+            totalAvailable = totalAvailable + egg.Count
+            if egg.Luck > topLuck then
+                topLuck = egg.Luck
+                topEgg = egg.Name .. " (" .. formatValueString(egg.Luck) .. " Luck)"
+            end
+        end
+
+        EggPanelLiveStatus:SetDesc(string.format(
+            "Next Reset: %s\nTotal Eggs on Map: %d\nUnique Egg Types: %d\nHighest Tier Egg: %s",
+            resetTime,
+            totalAvailable,
+            #eggList,
+            topEgg
+        ))
+    end)
+end
+
+--------------------------------------------------------------------------------
+-- TAB 3: MOVEMENT
 --------------------------------------------------------------------------------
 local MoveTab = Window:Tab({
     Title = "Movement",
@@ -1153,7 +1802,7 @@ local InfoSection = SettingsTab:Section({
 })
 
 InfoSection:Paragraph({
-    Title = "Frost Hub v2.3 - Egg Luck & Automation Suite",
+    Title = "Frost Hub v2.4 - Egg Panel & Live Radar Suite",
     Desc = "Built with WindUI for ultra-smooth responsiveness.\nPress RightShift or RightControl to toggle the window."
 })
 
@@ -1164,4 +1813,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
     end
 end)
 
-print("❄️ [Frost Hub] WindUI Egg Luck Suite initialized.")
+-- Initialize & start background auto-update for Egg Panel
+EggPanel:Init()
+EggPanel:StartAutoUpdate()
+
+print("❄️ [Frost Hub] WindUI Egg Panel & Radar Suite initialized.")
