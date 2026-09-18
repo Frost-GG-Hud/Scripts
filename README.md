@@ -61,6 +61,12 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
     - Continuously tracks live server storms (`ServerData.ActiveWeathers`) and sends instantaneous notifications on every weather event (e.g. Thunderstorm, Volt Tempest, Raging Inferno, Dreadful Void, Eternal Storm, Gigantuar).
     - Sends dynamic alerts when weather changes between storms or when skies clear.
     - Displays granted egg mutations, storm rarity/chance, and live countdown timer until storm expiration (`<t:EndsAt:R>`).
+- **⚙️ Configuration (Save & Load System)**:
+  - Located in the **Settings** tab with dynamic status tracking (`◈ Configuration Status`).
+  - **💾 Save Config**: Serializes and saves all current settings, toggles (Auto Collect, Egg Luck filter, Egg ESP, Auto Index, Auto Rebirth, Auto Hatch Luck, Webhooks, Notifications, Noclip), thresholds, and movement speed to `FrostHub/config.json`.
+  - **📂 Load Config**: Restores and applies all saved preferences at any time with a single click, eliminating manual setup.
+  - **No Auto-Load On Rejoin**: In accordance with user preference, settings are never automatically loaded when rejoining the game—giving full control over when to load.
+
 
 ### 🤖 Discord Bot Commands & Key System
 
