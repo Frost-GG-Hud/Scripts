@@ -1,12 +1,12 @@
 --[[
     ❄️ Frost Hub - Auto Collect Eggs (WindUI Edition)
-    Advanced gameplay automation & testing system with value filtering and Discord webhooks.
+    Advanced gameplay automation & testing system with Egg Luck filtering and Discord webhooks.
     
     Features:
     - Built on WindUI with acrylic blur, custom themes, tabs, and smooth animations
-    - Collect by Value:
-        • Filters eggs by expected income/value using flexible formats (e.g. 100, 2k, 100k, 1m, 300b)
-        • Only navigates to and collects eggs matching or exceeding the minimum value
+    - Egg Luck Filtering:
+        • Filters eggs by minimum luck using flexible shorthand formats (e.g. 100, 2k, 1m, 300b)
+        • Only collects eggs with equal to or higher luck than the entered threshold
     - Unified Movement Speed: Single slider (1 to 400) controlling Walk and Tween speeds
     - Movement Systems:
         • Walk (Pathfinding) - Intelligent obstacle & fence avoidance
@@ -91,10 +91,13 @@ local Config = {
     CarriedWaitTimeout = 5.0,
     DepositWaitTimeout = 10.0,
     ScanRetryDelay = 1.5,
-    -- Value Filtering
-    CollectByValue = false,
-    MinValue = 100000,                   -- Default 100k
-    MinValueString = "100k",
+    -- Egg Luck Filtering
+    CollectByLuck = false,
+    CollectByValue = false,              -- Backwards-compatible alias
+    MinLuck = 1000000,                   -- Default 1m (1,000,000 Luck)
+    MinLuckString = "1m",
+    MinValue = 1000000,                  -- Backwards-compatible alias
+    MinValueString = "1m",
     -- Webhook Configuration
     WebhookEnabled = false,
     WebhookURL = "",
@@ -110,6 +113,7 @@ local State = {
     Enabled = false,
     CurrentStatus = "Idle",
     TargetEggName = "None",
+    TargetEggLuck = 0,
     TargetEggValue = 0,
     EggsCollected = 0,
     StartTime = os.clock(),
@@ -118,10 +122,10 @@ local State = {
 }
 
 --------------------------------------------------------------------------------
--- GAME DATA & EGG VALUE CACHE
+-- GAME DATA & EGG LUCK CACHE
 --------------------------------------------------------------------------------
 local GameDataPets = nil
-local EggExpectedIncomeCache = {}
+local EggLuckCache = {}
 
 pcall(function()
     local gd = ReplicatedStorage:WaitForChild("GameData", 5)
@@ -131,39 +135,18 @@ pcall(function()
         end
 
         local eggs = gd:FindFirstChild("Eggs") and require(gd.Eggs)
-        local hl = gd:FindFirstChild("HatchLuck") and require(gd.HatchLuck)
-
-        if eggs and hl and GameDataPets then
+        if eggs then
             for eggName, eggData in pairs(eggs) do
-                local eggLuck = eggData.Luck or 1
-                local totalWeight = 0
-                local weightedIncome = 0
-
-                for petName, petData in pairs(GameDataPets) do
-                    local w = hl.GetWeight(petData.SampleSize, eggLuck)
-                    local inc = petData.Income or 0
-                    if w > 0 then
-                        totalWeight = totalWeight + w
-                        weightedIncome = weightedIncome + (w * inc)
-                    end
-                end
-
-                local expected = totalWeight > 0 and (weightedIncome / totalWeight) or 0
-                EggExpectedIncomeCache[eggName] = {
-                    Expected = math.floor(expected),
-                    Luck = eggLuck,
-                    Value = math.max(math.floor(expected), eggLuck)
-                }
+                EggLuckCache[eggName] = tonumber(eggData.Luck) or 1
             end
         end
     end
 end)
 
-local function getEggValue(eggModel)
+local function getEggLuck(eggModel)
     local eggName = eggModel.Name
-    local stats = EggExpectedIncomeCache[eggName]
-    if stats then
-        return stats.Value
+    if EggLuckCache[eggName] then
+        return EggLuckCache[eggName]
     end
 
     -- Fallback: check billboard if model exists
@@ -174,6 +157,8 @@ local function getEggValue(eggModel)
     end
     return 1
 end
+
+local getEggValue = getEggLuck -- Alias for backwards compatibility
 
 --------------------------------------------------------------------------------
 -- DISCORD WEBHOOK SUBSYSTEM
@@ -271,12 +256,14 @@ local function getAvailableEggs()
             local prompt = eggModel:FindFirstChildWhichIsA("ProximityPrompt", true)
 
             if primary and prompt and prompt.Enabled then
-                local eggVal = getEggValue(eggModel)
+                local eggLuck = getEggLuck(eggModel)
 
-                -- Check Value Filter
-                if Config.CollectByValue and Config.MinValue > 0 then
-                    if eggVal < Config.MinValue then
-                        continue -- Egg does not meet minimum expected value
+                -- Check Egg Luck Filter
+                local filterActive = Config.CollectByLuck or Config.CollectByValue
+                local minLuckThreshold = Config.MinLuck or Config.MinValue or 0
+                if filterActive and minLuckThreshold > 0 then
+                    if eggLuck < minLuckThreshold then
+                        continue -- Egg does not have equal to or higher luck than the entered value
                     end
                 end
 
@@ -287,7 +274,8 @@ local function getAvailableEggs()
                     Prompt = prompt,
                     Distance = dist,
                     Name = eggModel.Name,
-                    Value = eggVal
+                    Luck = eggLuck,
+                    Value = eggLuck
                 })
             end
         end
@@ -536,20 +524,21 @@ local function runCollectionLoop()
 
         if not State.Enabled then break end
 
-        -- 2. Select closest eligible egg (Filtered by value if enabled)
-        if Config.CollectByValue then
-            State.CurrentStatus = string.format("Scanning for Eggs >= %s...", formatValueString(Config.MinValue))
+        -- 2. Select closest eligible egg (Filtered by luck if enabled)
+        if Config.CollectByLuck or Config.CollectByValue then
+            State.CurrentStatus = string.format("Scanning for Eggs >= %s Luck...", formatValueString(Config.MinLuck or Config.MinValue))
         else
             State.CurrentStatus = "Scanning for Available Eggs..."
         end
         State.TargetEggName = "None"
+        State.TargetEggLuck = 0
         State.TargetEggValue = 0
         updateStatusUI()
 
         local available = getAvailableEggs()
         if #available == 0 then
-            if Config.CollectByValue then
-                State.CurrentStatus = string.format("No Eggs >= %s Found (Retrying...)", formatValueString(Config.MinValue))
+            if Config.CollectByLuck or Config.CollectByValue then
+                State.CurrentStatus = string.format("No Eggs >= %s Luck Found (Retrying...)", formatValueString(Config.MinLuck or Config.MinValue))
             else
                 State.CurrentStatus = "No Eggs Found, Retrying..."
             end
@@ -560,8 +549,9 @@ local function runCollectionLoop()
 
         local target = available[1]
         State.TargetEggName = target.Name
-        State.TargetEggValue = target.Value
-        State.CurrentStatus = string.format("Moving to %s [%s] (%.0f studs)", target.Name, formatValueString(target.Value), target.Distance)
+        State.TargetEggLuck = target.Luck
+        State.TargetEggValue = target.Luck
+        State.CurrentStatus = string.format("Moving to %s [Luck: %s] (%.0f studs)", target.Name, formatValueString(target.Luck), target.Distance)
         updateStatusUI()
 
         -- 3. Move player to target
@@ -608,7 +598,7 @@ local function runCollectionLoop()
                 color = 0x00d2ff,
                 fields = {
                     { name = "Egg Type", value = target.Name, inline = true },
-                    { name = "Expected Value", value = formatValueString(target.Value), inline = true },
+                    { name = "Egg Luck", value = formatValueString(target.Luck), inline = true },
                     { name = "Distance", value = string.format("%.0f studs", target.Distance), inline = true },
                     { name = "Movement Mode", value = Config.MovementMode, inline = true },
                     { name = "Speed", value = tostring(Config.Speed) .. " studs/s", inline = true },
@@ -807,41 +797,45 @@ local ToggleAuto = MainSection:Toggle({
 })
 
 -- VALUE FILTERING SECTION
+-- EGG LUCK FILTERING SECTION
 local FilterSection = MainTab:Section({
-    Title = "Value Filtering",
+    Title = "Egg Luck Filtering",
     Opened = true
 })
 
 FilterSection:Toggle({
-    Title = "Collect by Value",
-    Desc = "Only collect eggs expected to generate more than the minimum value after hatching",
+    Title = "Collect by Luck",
+    Desc = "Only collect eggs with equal to or higher luck than the specified threshold",
     Value = false,
     Callback = function(state)
+        Config.CollectByLuck = state
         Config.CollectByValue = state
         updateStatusUI()
         WindUI:Notify({
-            Title = "Value Filter " .. (state and "Enabled" or "Disabled"),
-            Content = state and string.format("Collecting eggs >= %s", formatValueString(Config.MinValue)) or "Collecting all available eggs",
+            Title = "Luck Filter " .. (state and "Enabled" or "Disabled"),
+            Content = state and string.format("Collecting eggs >= %s Luck", formatValueString(Config.MinLuck)) or "Collecting all available eggs",
             Duration = 2.5,
-            Icon = state and "filter" or "filter-x"
+            Icon = state and "sparkles" or "sparkles"
         })
     end
 })
 
 FilterSection:Input({
-    Title = "Minimum Egg Value",
-    Desc = "Accepts formats like 100, 2k, 100k, 1m, 300b",
-    Value = Config.MinValueString,
-    Placeholder = "e.g. 100, 2k, 100k, 1m, 300b",
+    Title = "Egg Luck",
+    Desc = "Enter minimum luck (e.g. 100, 2k, 1m, 300b)",
+    Value = Config.MinLuckString,
+    Placeholder = "e.g. 100, 2k, 1m, 300b",
     Callback = function(text)
         local parsed = parseValueString(text)
         if parsed > 0 then
+            Config.MinLuck = parsed
+            Config.MinLuckString = text
             Config.MinValue = parsed
             Config.MinValueString = text
             updateStatusUI()
             WindUI:Notify({
-                Title = "Threshold Updated",
-                Content = string.format("Minimum set to %s (%s/s)", formatValueString(parsed), tostring(parsed)),
+                Title = "Egg Luck Threshold Updated",
+                Content = string.format("Minimum luck set to %s (%s)", formatValueString(parsed), tostring(parsed)),
                 Duration = 2.5,
                 Icon = "check"
             })
@@ -851,18 +845,18 @@ FilterSection:Input({
 
 local StatusParagraph = MainSection:Paragraph({
     Title = "Live Activity Status",
-    Desc = "Status: Idle\nTarget: None\nEggs Collected: 0\nActive Engine: Walk (Pathfinding)\nCurrent Speed: 60\nValue Filter: Disabled"
+    Desc = "Status: Idle\nTarget: None\nEggs Collected: 0\nActive Engine: Walk (Pathfinding)\nCurrent Speed: 60\nLuck Filter: Disabled"
 })
 
 updateStatusUI = function()
     pcall(function()
         local filterStatus = "Disabled"
-        if Config.CollectByValue then
-            filterStatus = string.format("Active (>= %s)", formatValueString(Config.MinValue))
+        if Config.CollectByLuck or Config.CollectByValue then
+            filterStatus = string.format("Active (>= %s Luck)", formatValueString(Config.MinLuck or Config.MinValue))
         end
 
         StatusParagraph:SetDesc(string.format(
-            "Status: %s\nTarget: %s\nEggs Collected: %d\nActive Engine: %s\nSpeed: %d studs/s\nValue Filter: %s",
+            "Status: %s\nTarget: %s\nEggs Collected: %d\nActive Engine: %s\nSpeed: %d studs/s\nLuck Filter: %s",
             State.CurrentStatus,
             State.TargetEggName,
             State.EggsCollected,
@@ -1149,7 +1143,7 @@ local InfoSection = SettingsTab:Section({
 })
 
 InfoSection:Paragraph({
-    Title = "Frost Hub v2.2 - Value Filter & Automation Suite",
+    Title = "Frost Hub v2.3 - Egg Luck & Automation Suite",
     Desc = "Built with WindUI for ultra-smooth responsiveness.\nPress RightShift or RightControl to toggle the window."
 })
 
@@ -1160,4 +1154,4 @@ UserInputService.InputBegan:Connect(function(input, processed)
     end
 end)
 
-print("❄️ [Frost Hub] WindUI Value-Filter Suite initialized.")
+print("❄️ [Frost Hub] WindUI Egg Luck Suite initialized.")
