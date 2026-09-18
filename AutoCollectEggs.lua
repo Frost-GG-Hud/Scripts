@@ -1,16 +1,18 @@
 --[[
     ❄️ Frost Hub - Auto Collect Eggs (WindUI Edition)
-    Advanced gameplay automation & testing system with multi-modal movement engines.
+    Advanced gameplay automation & testing system with unified movement and Discord webhooks.
     
     Features:
     - Built on WindUI with acrylic blur, custom themes, tabs, and smooth animations
-    - Multiple Movement Systems:
+    - Unified Movement Speed: Single slider (1 to 400) controlling Walk and Tween speeds
+    - Movement Systems:
         • Walk (Pathfinding) - Intelligent obstacle & fence avoidance
         • Walk (Direct) - Straight-line speed walk
         • Tween (Smooth) - Gliding CFrame interpolation with anti-fall & noclip
-    - Speed Controls: Configurable from 1 to 400 studs/s for both walk and tween
-    - Legitimate interaction triggers & server-validated carried states (player.Basket)
-    - Auto plot detection & deposit validation
+    - Discord Webhook System:
+        • Real-time notifications for egg catches, deposits, and hatch events
+        • Hatch alerts with pet name, rarity, income/sec generated, weight, and mutation
+    - Server-validated loop (RenderedEggs & player.Basket confirmation)
 --]]
 
 local Players = game:GetService("Players")
@@ -19,6 +21,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
@@ -32,8 +35,7 @@ end
 --------------------------------------------------------------------------------
 local Config = {
     MovementMode = "Walk (Pathfinding)", -- "Walk (Pathfinding)", "Walk (Direct)", "Tween (Smooth)"
-    WalkSpeed = 24,                      -- 1 to 400
-    TweenSpeed = 85,                     -- 1 to 400 studs/s
+    Speed = 60,                          -- Unified speed for Walk and Tween (1 to 400)
     NoclipOnTween = true,
     AutoJump = true,
     AgentRadius = 2.0,
@@ -46,6 +48,12 @@ local Config = {
     CarriedWaitTimeout = 5.0,
     DepositWaitTimeout = 10.0,
     ScanRetryDelay = 1.5,
+    -- Webhook Configuration
+    WebhookEnabled = false,
+    WebhookURL = "",
+    NotifyOnCollected = true,
+    NotifyOnDeposited = true,
+    NotifyOnHatched = true,
 }
 
 --------------------------------------------------------------------------------
@@ -60,6 +68,50 @@ local State = {
     CurrentTask = nil,
     ActiveTween = nil,
 }
+
+--------------------------------------------------------------------------------
+-- GAME DATA & STATS CACHE
+--------------------------------------------------------------------------------
+local GameDataPets = nil
+pcall(function()
+    local gd = ReplicatedStorage:WaitForChild("GameData", 5)
+    if gd and gd:FindFirstChild("Pets") then
+        GameDataPets = require(gd.Pets)
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- DISCORD WEBHOOK SUBSYSTEM
+--------------------------------------------------------------------------------
+local function sendDiscordWebhook(embedData)
+    if not Config.WebhookEnabled or Config.WebhookURL == "" then return end
+
+    local url = string.gsub(Config.WebhookURL, "%s+", "")
+    if not string.find(url, "^https://") then return end
+
+    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request)
+    if not httpRequest then return end
+
+    task.spawn(function()
+        local payload = {
+            username = "❄️ Frost Hub | Farm Tracker",
+            avatar_url = "https://raw.githubusercontent.com/Frost-GG-Hud/Launcher/main/icon.png",
+            embeds = { embedData }
+        }
+
+        local jsonBody = HttpService:JSONEncode(payload)
+        pcall(function()
+            httpRequest({
+                Url = url,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = jsonBody
+            })
+        end)
+    end)
+end
 
 --------------------------------------------------------------------------------
 -- HELPER FUNCTIONS
@@ -78,7 +130,7 @@ local function getHRP()
     return char:WaitForChild("HumanoidRootPart", 5)
 end
 
--- Locates the player's personal plot (deposit area)
+-- Locates player's personal plot
 local function getPlayerPlot()
     local plotsFolder = workspace:FindFirstChild("Plots")
     if not plotsFolder then return nil end
@@ -95,7 +147,7 @@ local function getPlayerPlot()
     return nil
 end
 
--- Gets the deposit position within the player's plot
+-- Gets deposit position within player's plot
 local function getDepositTargetPosition()
     local plot = getPlayerPlot()
     if not plot then return nil end
@@ -143,7 +195,7 @@ local function getAvailableEggs()
     return list
 end
 
--- Checks how many eggs are currently in the player's carried basket
+-- Checks how many eggs are in player's carried basket
 local function getCarriedCount()
     local basket = LocalPlayer:FindFirstChild("Basket")
     if basket then
@@ -153,7 +205,7 @@ local function getCarriedCount()
 end
 
 --------------------------------------------------------------------------------
--- MULTI-MODE MOVEMENT SYSTEM
+-- UNIFIED MOVEMENT SYSTEM (Walk & Tween)
 --------------------------------------------------------------------------------
 local function moveToPoint(targetPos)
     local hrp = getHRP()
@@ -161,17 +213,17 @@ local function moveToPoint(targetPos)
     if not hrp or not hum then return false end
 
     local mode = Config.MovementMode
+    local currentSpeed = math.clamp(tonumber(Config.Speed) or 60, 1, 400)
 
     ----------------------------------------------------------------------------
-    -- MODE 1: TWEEN (Smooth CFrame Glide)
+    -- MODE 1: TWEEN (Smooth CFrame Glide at Config.Speed)
     ----------------------------------------------------------------------------
     if mode == "Tween (Smooth)" then
         local adjustedTarget = targetPos + Vector3.new(0, 2.5, 0)
         local distance = (hrp.Position - adjustedTarget).Magnitude
         if distance <= Config.MaxInteractDistance then return true end
 
-        local speed = math.clamp(tonumber(Config.TweenSpeed) or 85, 1, 400)
-        local duration = math.clamp(distance / speed, 0.05, 45)
+        local duration = math.clamp(distance / currentSpeed, 0.05, 45)
 
         -- Noclip during tween if enabled
         local noclipConn = nil
@@ -213,10 +265,10 @@ local function moveToPoint(targetPos)
         return (hrp.Position - targetPos).Magnitude <= (Config.MaxInteractDistance + 3)
 
     ----------------------------------------------------------------------------
-    -- MODE 2: WALK (Direct MoveTo)
+    -- MODE 2: WALK DIRECT (Direct MoveTo at Config.Speed)
     ----------------------------------------------------------------------------
     elseif mode == "Walk (Direct)" then
-        hum.WalkSpeed = math.clamp(tonumber(Config.WalkSpeed) or 24, 1, 400)
+        hum.WalkSpeed = currentSpeed
         hum:MoveTo(targetPos)
 
         local start = os.clock()
@@ -241,10 +293,10 @@ local function moveToPoint(targetPos)
         return (hrp.Position - targetPos).Magnitude <= (Config.MaxInteractDistance + 3)
 
     ----------------------------------------------------------------------------
-    -- MODE 3: WALK (Pathfinding with obstacle avoidance)
+    -- MODE 3: WALK PATHFINDING (Intelligent Pathing at Config.Speed)
     ----------------------------------------------------------------------------
     else
-        hum.WalkSpeed = math.clamp(tonumber(Config.WalkSpeed) or 24, 1, 400)
+        hum.WalkSpeed = currentSpeed
 
         local path = PathfindingService:CreatePath({
             AgentRadius = Config.AgentRadius,
@@ -358,6 +410,21 @@ local function runCollectionLoop()
                 State.EggsCollected = State.EggsCollected + 1
                 State.CurrentStatus = "Deposited Successfully!"
                 updateStatusUI()
+
+                if Config.NotifyOnDeposited then
+                    sendDiscordWebhook({
+                        title = "📦 Egg Deposited at Plot!",
+                        description = "Egg safely delivered and deposited into personal plot.",
+                        color = 0x2ecc71,
+                        fields = {
+                            { name = "Deposit Status", value = "Confirmed Complete", inline = true },
+                            { name = "Session Total", value = tostring(State.EggsCollected) .. " Eggs", inline = true },
+                        },
+                        footer = { text = "❄️ Frost Hub • Deposit Tracker" },
+                        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+                    })
+                end
+
                 task.wait(0.4)
             end
         end
@@ -418,6 +485,24 @@ local function runCollectionLoop()
             continue
         end
 
+        -- Webhook: Egg Caught Notification
+        if Config.NotifyOnCollected then
+            sendDiscordWebhook({
+                title = "🥚 Egg Caught / Collected!",
+                description = string.format("Player picked up a **%s** on the map.", target.Name),
+                color = 0x00d2ff,
+                fields = {
+                    { name = "Egg Type", value = target.Name, inline = true },
+                    { name = "Distance", value = string.format("%.0f studs", target.Distance), inline = true },
+                    { name = "Movement Mode", value = Config.MovementMode, inline = true },
+                    { name = "Movement Speed", value = tostring(Config.Speed) .. " studs/s", inline = true },
+                    { name = "Session Farmed", value = tostring(State.EggsCollected + 1) .. " Eggs", inline = true },
+                },
+                footer = { text = "❄️ Frost Hub • Egg Tracker" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            })
+        end
+
         -- 6. Navigate to deposit plot
         State.CurrentStatus = "Carrying to Plot Deposit..."
         updateStatusUI()
@@ -446,6 +531,21 @@ local function runCollectionLoop()
             State.EggsCollected = State.EggsCollected + 1
             State.CurrentStatus = "Deposit Confirmed! (+1)"
             updateStatusUI()
+
+            if Config.NotifyOnDeposited then
+                sendDiscordWebhook({
+                    title = "📦 Egg Deposited at Plot!",
+                    description = string.format("Successfully deposited **%s** into personal plot.", target.Name),
+                    color = 0x2ecc71,
+                    fields = {
+                        { name = "Egg Deposited", value = target.Name, inline = true },
+                        { name = "Session Total", value = tostring(State.EggsCollected) .. " Eggs", inline = true },
+                    },
+                    footer = { text = "❄️ Frost Hub • Deposit Tracker" },
+                    timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+                })
+            end
+
             task.wait(0.3)
         end
     end
@@ -456,9 +556,58 @@ local function runCollectionLoop()
 end
 
 --------------------------------------------------------------------------------
+-- HATCH EVENT LISTENER & NOTIFIER
+--------------------------------------------------------------------------------
+local hatchRemote = ReplicatedStorage:FindFirstChild("Remotes")
+    and ReplicatedStorage.Remotes:FindFirstChild("Game")
+    and ReplicatedStorage.Remotes.Game:FindFirstChild("Hatch")
+
+if hatchRemote then
+    hatchRemote.OnClientEvent:Connect(function(data)
+        if typeof(data) == "table" and (data.Owner == LocalPlayer.UserId or data.Owner == LocalPlayer.Name or tostring(data.Owner) == tostring(LocalPlayer.UserId)) then
+            local petName = tostring(data.PetName or "Pet")
+            local weightStr = data.Weight and string.format("%.2f kg", data.Weight) or "Normal"
+            local mutationStr = data.Mutation and tostring(data.Mutation) or "None"
+
+            local income = 0
+            local rarity = "Common"
+            if GameDataPets and GameDataPets[petName] then
+                income = GameDataPets[petName].Income or 0
+                rarity = GameDataPets[petName].Rarity or "Common"
+            end
+
+            local totalIncome = "0/s"
+            pcall(function()
+                local ls = LocalPlayer:FindFirstChild("leaderstats")
+                if ls and ls:FindFirstChild("Income/s") then
+                    totalIncome = tostring(ls["Income/s"].Value) .. "/s"
+                end
+            end)
+
+            if Config.NotifyOnHatched then
+                sendDiscordWebhook({
+                    title = "🐣 Egg Successfully Hatched!",
+                    description = string.format("An egg hatched into **%s** (%s)!", petName, rarity),
+                    color = 0xffaa00,
+                    fields = {
+                        { name = "🐾 Pet", value = petName, inline = true },
+                        { name = "💎 Rarity", value = rarity, inline = true },
+                        { name = "💰 Generates", value = string.format("+$%s/s", tostring(income)), inline = true },
+                        { name = "⚖️ Weight", value = weightStr, inline = true },
+                        { name = "🧬 Mutation", value = mutationStr, inline = true },
+                        { name = "📈 Total Income/s", value = totalIncome, inline = true },
+                    },
+                    footer = { text = "❄️ Frost Hub • Hatch Tracker" },
+                    timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+                })
+            end
+        end
+    end)
+end
+
+--------------------------------------------------------------------------------
 -- WINDUI MODERN HUD CREATION
 --------------------------------------------------------------------------------
--- Cleanup any older instances
 pcall(function()
     if gethui then
         for _, c in ipairs(gethui():GetChildren()) do
@@ -477,9 +626,9 @@ local Window = WindUI:CreateWindow({
     Icon = "snowflake",
     Author = "Prototyping & Testing Suite",
     Folder = "FrostHub",
-    Size = UDim2.fromOffset(560, 420),
-    MinSize = Vector2.new(480, 340),
-    MaxSize = Vector2.new(800, 580),
+    Size = UDim2.fromOffset(580, 440),
+    MinSize = Vector2.new(500, 360),
+    MaxSize = Vector2.new(850, 600),
     Transparent = true,
     Theme = "Dark",
     Resizable = true,
@@ -511,7 +660,7 @@ local ToggleAuto = MainSection:Toggle({
             State.CurrentTask = task.spawn(runCollectionLoop)
             WindUI:Notify({
                 Title = "Auto Collect Enabled",
-                Content = "Engine active using " .. Config.MovementMode,
+                Content = string.format("Engine active using %s @ %d speed", Config.MovementMode, Config.Speed),
                 Duration = 2.5,
                 Icon = "play"
             })
@@ -540,17 +689,18 @@ local ToggleAuto = MainSection:Toggle({
 
 local StatusParagraph = MainSection:Paragraph({
     Title = "Live Activity Status",
-    Desc = "Status: Idle\nTarget: None\nEggs Collected: 0\nActive Engine: Walk (Pathfinding)"
+    Desc = "Status: Idle\nTarget: None\nEggs Collected: 0\nActive Engine: Walk (Pathfinding)\nCurrent Speed: 60"
 })
 
 updateStatusUI = function()
     pcall(function()
         StatusParagraph:SetDesc(string.format(
-            "Status: %s\nTarget: %s\nEggs Collected: %d\nActive Engine: %s",
+            "Status: %s\nTarget: %s\nEggs Collected: %d\nActive Engine: %s\nCurrent Speed: %d studs/s",
             State.CurrentStatus,
             State.TargetEggName,
             State.EggsCollected,
-            Config.MovementMode
+            Config.MovementMode,
+            Config.Speed
         ))
     end)
 end
@@ -595,7 +745,7 @@ ActionsSection:Button({
 })
 
 --------------------------------------------------------------------------------
--- TAB 2: MOVEMENT ENGINE
+-- TAB 2: MOVEMENT
 --------------------------------------------------------------------------------
 local MoveTab = Window:Tab({
     Title = "Movement",
@@ -603,13 +753,13 @@ local MoveTab = Window:Tab({
 })
 
 local MoveSection = MoveTab:Section({
-    Title = "Movement Systems",
+    Title = "Movement Configuration",
     Opened = true
 })
 
 MoveSection:Dropdown({
     Title = "Movement Mode",
-    Desc = "Choose between intelligent pathfinding, direct sprint, or smooth CFrame tween glide",
+    Desc = "Select navigation mode (Walk Pathfinding, Walk Direct, or Tween Glide)",
     Values = { "Walk (Pathfinding)", "Walk (Direct)", "Tween (Smooth)" },
     Value = "Walk (Pathfinding)",
     Callback = function(selected)
@@ -624,17 +774,19 @@ MoveSection:Dropdown({
     end
 })
 
-local WalkSpeedSlider = MoveSection:Slider({
-    Title = "Walk Speed",
-    Desc = "Movement speed applied to Humanoid for Walk modes (1 to 400)",
+-- UNIFIED SPEED CHANGER (Applies to both Walk and Tween)
+local UnifiedSpeedSlider = MoveSection:Slider({
+    Title = "Movement Speed",
+    Desc = "Unified speed applied automatically to Tween and Walk modes (1 to 400)",
     Value = {
         Min = 1,
         Max = 400,
-        Default = 24
+        Default = 60
     },
     Step = 1,
     Callback = function(val)
-        Config.WalkSpeed = val
+        Config.Speed = val
+        updateStatusUI()
         pcall(function()
             if State.Enabled and Config.MovementMode ~= "Tween (Smooth)" then
                 getHumanoid().WalkSpeed = val
@@ -643,26 +795,12 @@ local WalkSpeedSlider = MoveSection:Slider({
     end
 })
 
-local TweenSpeedSlider = MoveSection:Slider({
-    Title = "Tween Speed",
-    Desc = "Gliding speed in studs per second for Tween mode (1 to 400)",
-    Value = {
-        Min = 1,
-        Max = 400,
-        Default = 85
-    },
-    Step = 1,
-    Callback = function(val)
-        Config.TweenSpeed = val
-    end
-})
-
-local OptionsSection = MoveTab:Section({
+local MoveModifiersSection = MoveTab:Section({
     Title = "Movement Modifiers",
     Opened = true
 })
 
-OptionsSection:Toggle({
+MoveModifiersSection:Toggle({
     Title = "Noclip During Tween",
     Desc = "Disables player collision during tweening to prevent snagging on walls/trees",
     Value = true,
@@ -671,7 +809,7 @@ OptionsSection:Toggle({
     end
 })
 
-OptionsSection:Toggle({
+MoveModifiersSection:Toggle({
     Title = "Auto Jump Obstacles",
     Desc = "Automatically jumps when approaching hurdles or when stuck during walk",
     Value = true,
@@ -681,7 +819,117 @@ OptionsSection:Toggle({
 })
 
 --------------------------------------------------------------------------------
--- TAB 3: SETTINGS & HUD CUSTOMIZATION
+-- TAB 3: WEBHOOK NOTIFICATIONS
+--------------------------------------------------------------------------------
+local WebhookTab = Window:Tab({
+    Title = "Webhook",
+    Icon = "bell"
+})
+
+local WebhookConfigSection = WebhookTab:Section({
+    Title = "Discord Webhook Setup",
+    Opened = true
+})
+
+WebhookConfigSection:Toggle({
+    Title = "Enable Discord Webhook",
+    Desc = "Toggles sending real-time egg farming & hatch alerts to your Discord channel",
+    Value = false,
+    Callback = function(state)
+        Config.WebhookEnabled = state
+        WindUI:Notify({
+            Title = "Webhook Notifications",
+            Content = state and "Webhook alerts enabled!" or "Webhook alerts disabled.",
+            Duration = 2.5,
+            Icon = state and "check-circle" or "x-circle"
+        })
+    end
+})
+
+WebhookConfigSection:Input({
+    Title = "Discord Webhook URL",
+    Desc = "Enter your Discord channel webhook URL",
+    Value = Config.WebhookURL,
+    Placeholder = "https://discord.com/api/webhooks/...",
+    Callback = function(text)
+        Config.WebhookURL = text or ""
+    end
+})
+
+WebhookConfigSection:Button({
+    Title = "Test Webhook Notification",
+    Desc = "Sends a sample embed to test that your webhook URL works properly",
+    Callback = function()
+        if Config.WebhookURL == "" then
+            WindUI:Notify({
+                Title = "Webhook Error",
+                Content = "Please enter a valid Discord webhook URL first!",
+                Duration = 3,
+                Icon = "alert-triangle"
+            })
+            return
+        end
+
+        local originalEnabled = Config.WebhookEnabled
+        Config.WebhookEnabled = true
+        sendDiscordWebhook({
+            title = "❄️ Frost Hub Webhook Connected!",
+            description = "Your Discord webhook has been successfully configured and verified.",
+            color = 0x3498db,
+            fields = {
+                { name = "Status", value = "Connected & Active", inline = true },
+                { name = "Game", value = "Ride A Pet", inline = true },
+                { name = "Active Speed", value = tostring(Config.Speed) .. " studs/s", inline = true },
+                { name = "Movement Mode", value = Config.MovementMode, inline = true },
+            },
+            footer = { text = "❄️ Frost Hub • Webhook Diagnostics" },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+        })
+        Config.WebhookEnabled = originalEnabled
+
+        WindUI:Notify({
+            Title = "Test Sent",
+            Content = "Test payload dispatched to your Discord webhook!",
+            Duration = 3,
+            Icon = "send"
+        })
+    end
+})
+
+local WebhookTriggersSection = WebhookTab:Section({
+    Title = "Notification Filters",
+    Opened = true
+})
+
+WebhookTriggersSection:Toggle({
+    Title = "Egg Caught Alerts",
+    Desc = "Send notification when player picks up an egg on the map",
+    Value = true,
+    Callback = function(state)
+        Config.NotifyOnCollected = state
+    end
+})
+
+WebhookTriggersSection:Toggle({
+    Title = "Egg Deposited Alerts",
+    Desc = "Send notification when an egg is deposited at your plot",
+    Value = true,
+    Callback = function(state)
+        Config.NotifyOnDeposited = state
+    end
+})
+
+WebhookTriggersSection:Toggle({
+    Title = "Egg Hatched & Income Alerts",
+    Desc = "Send notification when an egg hatches (pet, rarity, and income/sec)",
+    Value = true,
+    Callback = function(state)
+        Config.NotifyOnHatched = state
+    end
+})
+
+--------------------------------------------------------------------------------
+-- TAB 4: SETTINGS & HUD CUSTOMIZATION
 --------------------------------------------------------------------------------
 local SettingsTab = Window:Tab({
     Title = "Settings",
@@ -733,7 +981,7 @@ local InfoSection = SettingsTab:Section({
 })
 
 InfoSection:Paragraph({
-    Title = "Frost Hub v2.0 - Automation Prototype",
+    Title = "Frost Hub v2.1 - Automation & Webhook Suite",
     Desc = "Built with WindUI for ultra-smooth responsiveness.\nPress RightShift or RightControl to toggle the window."
 })
 
@@ -744,4 +992,4 @@ UserInputService.InputBegan:Connect(function(input, processed)
     end
 end)
 
-print("❄️ [Frost Hub] WindUI Multi-Engine Suite initialized.")
+print("❄️ [Frost Hub] WindUI Unified Speed & Webhook Suite initialized.")
