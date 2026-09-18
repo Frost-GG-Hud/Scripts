@@ -2906,11 +2906,6 @@ WebhookTriggersSection:Toggle({
     end
 })
 
-WebhookTriggersSection:Paragraph({
-    Title = "Webhook Defaults",
-    Desc = "Single alert per egg and Farmer Statistics are automatically enabled by default to ensure clean, comprehensive tracking."
-})
-
 --------------------------------------------------------------------------------
 -- TAB 6: SETTINGS & HUD CUSTOMIZATION
 --------------------------------------------------------------------------------
