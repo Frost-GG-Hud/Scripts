@@ -2370,6 +2370,8 @@ local function validateFrostKey(inputKey)
     return false
 end
 
+local DISCORD_INVITE_URL = "https://discord.gg/TWnmPCxxSY"
+
 pcall(function()
     if isfile and delfile then
         local oldKeyFiles = {
@@ -2389,6 +2391,41 @@ pcall(function()
     end
 end)
 
+-- Key System customization: rename button to "Get discord invite" and notify on click with instructions
+task.spawn(function()
+    local handledButtons = {}
+    local function setupKeyButton(desc)
+        if desc:IsA("TextLabel") and (desc.Text == "Get key" or desc.Text == "Copy key") then
+            desc.Text = "Get discord invite"
+            local btn = desc:FindFirstAncestorWhichIsA("TextButton") or (desc.Parent and desc.Parent:FindFirstAncestorWhichIsA("TextButton"))
+            if btn and not handledButtons[btn] then
+                handledButtons[btn] = true
+                btn.MouseButton1Click:Connect(function()
+                    pcall(function()
+                        local setclip = setclipboard or toclipboard or (syn and syn.write_clipboard)
+                        if setclip then
+                            setclip(DISCORD_INVITE_URL)
+                        end
+                    end)
+                    WindUI:Notify({
+                        Title = "Discord Invite Copied",
+                        Content = "Discord invite link copied to clipboard!\nPaste it into your browser or a Discord channel and join the server to get the key for free.\n\nKey tutorial is available in the get script key channel in the Discord server.",
+                        Duration = 8,
+                        Icon = "link"
+                    })
+                end)
+            end
+        end
+    end
+
+    if WindUI.ScreenGui and WindUI.ScreenGui:FindFirstChild("KeySystem") then
+        for _, desc in ipairs(WindUI.ScreenGui.KeySystem:GetDescendants()) do
+            setupKeyButton(desc)
+        end
+        WindUI.ScreenGui.KeySystem.DescendantAdded:Connect(setupKeyButton)
+    end
+end)
+
 local Window = WindUI:CreateWindow({
     Title = "Frost Hub | Automation",
     Icon = "snowflake",
@@ -2405,8 +2442,8 @@ local Window = WindUI:CreateWindow({
     KeySystem = {
         KeyValidator = validateFrostKey,
         Title = "Frost Hub • Key System",
-        Note = "Enter your key generated via Discord bot (/create key).",
-        URL = "https://discord.com/oauth2/authorize?client_id=1550562639829274697&permissions=2147485696&scope=bot%20applications.commands",
+        Note = "Enter your key generated via Discord bot (/create key).\n• Join our Discord to get your key for free!\n• Key tutorial is available in the get script key channel in the Discord server.",
+        URL = DISCORD_INVITE_URL,
         SaveKey = false,
     },
 })
