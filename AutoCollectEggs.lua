@@ -2241,6 +2241,135 @@ end)
 
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
+--------------------------------------------------------------------------------
+-- SCRIPT KEY SYSTEM VALIDATOR
+--------------------------------------------------------------------------------
+local function decodeB64(input)
+    if crypt and crypt.base64decode then
+        return crypt.base64decode(input)
+    end
+    if syn and syn.crypt and syn.crypt.base64 and syn.crypt.base64.decode then
+        return syn.crypt.base64.decode(input)
+    end
+    local bs = {
+        A=0,B=1,C=2,D=3,E=4,F=5,G=6,H=7,I=8,J=9,K=10,L=11,M=12,N=13,O=14,P=15,
+        Q=16,R=17,S=18,T=19,U=20,V=21,W=22,X=23,Y=24,Z=25,a=26,b=27,c=28,d=29,
+        e=30,f=31,g=32,h=33,i=34,j=35,k=36,l=37,m=38,n=39,o=40,p=41,q=42,r=43,
+        s=44,t=45,u=46,v=47,w=48,x=49,y=50,z=51,["0"]=52,["1"]=53,["2"]=54,
+        ["3"]=55,["4"]=56,["5"]=57,["6"]=58,["7"]=59,["8"]=60,["9"]=61,["+"]=62,["/"]=63
+    }
+    local out = {}
+    local n = #input
+    local i = 1
+    while i <= n do
+        local a = bs[input:sub(i, i)] or 0
+        local b = bs[input:sub(i+1, i+1)] or 0
+        local c = bs[input:sub(i+2, i+2)] or 0
+        local d = bs[input:sub(i+3, i+3)] or 0
+        local c1 = (a * 4) + math.floor(b / 16)
+        local c2 = ((b % 16) * 16) + math.floor(c / 4)
+        local c3 = ((c % 4) * 64) + d
+        table.insert(out, string.char(c1))
+        if input:sub(i+2, i+2) ~= "=" then table.insert(out, string.char(c2)) end
+        if input:sub(i+3, i+3) ~= "=" then table.insert(out, string.char(c3)) end
+        i = i + 4
+    end
+    return table.concat(out)
+end
+
+local function fetchValidKeys()
+    local jsonContent = nil
+    -- Attempt 1: Real-time GitHub API (instant sync, 0s cache delay)
+    pcall(function()
+        local res = game:HttpGet("https://api.github.com/repos/Frost-GG-Hud/Scripts/contents/keys.json")
+        if res and res ~= "" then
+            local data = HttpService:JSONDecode(res)
+            if data and data.content then
+                local cleanB64 = string.gsub(data.content, "%s+", "")
+                jsonContent = decodeB64(cleanB64)
+            end
+        end
+    end)
+    -- Attempt 2: Fallback to raw GitHub
+    if not jsonContent or jsonContent == "" then
+        pcall(function()
+            jsonContent = game:HttpGet("https://raw.githubusercontent.com/Frost-GG-Hud/Scripts/main/keys.json?t=" .. tostring(os.time()))
+        end)
+    end
+    if not jsonContent or jsonContent == "" then return {} end
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(jsonContent)
+    end)
+    if success and type(result) == "table" and result.keys then
+        return result.keys
+    end
+    return {}
+end
+
+local function validateFrostKey(inputKey)
+    if not inputKey or inputKey == "" then return false end
+    local cleanKey = string.gsub(string.upper(tostring(inputKey)), "%s+", "")
+    local keysList = fetchValidKeys()
+    local currentTime = os.time()
+
+    for _, keyData in ipairs(keysList) do
+        local k = string.gsub(string.upper(tostring(keyData.key or "")), "%s+", "")
+        if k == cleanKey then
+            if keyData.status and string.lower(keyData.status) == "revoked" then
+                WindUI:Notify({
+                    Title = "Key System",
+                    Content = "This key has been revoked.",
+                    Duration = 4,
+                    Icon = "circle-alert"
+                })
+                return false
+            end
+
+            local expiresAt = tonumber(keyData.expires_at)
+            if expiresAt and expiresAt > 0 then
+                if currentTime > expiresAt then
+                    WindUI:Notify({
+                        Title = "Key System",
+                        Content = "Key has expired! Use /create key in Discord.",
+                        Duration = 4,
+                        Icon = "clock-alert"
+                    })
+                    return false
+                else
+                    local remaining = expiresAt - currentTime
+                    local days = math.floor(remaining / 86400)
+                    local hours = math.floor((remaining % 86400) / 3600)
+                    local timeStr = days > 0 and string.format("%dd %dh", days, hours) or string.format("%dh", hours)
+                    WindUI:Notify({
+                        Title = "Key System",
+                        Content = "Access granted! Key valid for " .. timeStr .. ".",
+                        Duration = 3,
+                        Icon = "check-circle"
+                    })
+                    return true
+                end
+            else
+                -- Lifetime key
+                WindUI:Notify({
+                    Title = "Key System",
+                    Content = "Access granted! Lifetime key verified.",
+                    Duration = 3,
+                    Icon = "check-circle"
+                })
+                return true
+            end
+        end
+    end
+
+    WindUI:Notify({
+        Title = "Key System",
+        Content = "Invalid key. Generate one in Discord using /create key.",
+        Duration = 4,
+        Icon = "x-circle"
+    })
+    return false
+end
+
 local Window = WindUI:CreateWindow({
     Title = "Frost Hub | Automation",
     Icon = "snowflake",
@@ -2254,6 +2383,13 @@ local Window = WindUI:CreateWindow({
     Resizable = true,
     SideBarWidth = 180,
     HideSearchBar = true,
+    KeySystem = {
+        KeyValidator = validateFrostKey,
+        Title = "Frost Hub • Key System",
+        Note = "Enter your key generated via Discord bot (/create key).",
+        URL = "https://discord.com/oauth2/authorize?client_id=1550562639829274697&permissions=2147485696&scope=bot%20applications.commands",
+        SaveKey = true,
+    },
 })
 
 --------------------------------------------------------------------------------
