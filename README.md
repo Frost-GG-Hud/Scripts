@@ -18,7 +18,7 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
   - **Farmer & Session Details**: Displays player username, display name, account age, place ID, and quick keybind reference with sleek typographic symbols.
 - **💎 WindUI Interface**: Dark acrylic glassmorphism, fluid micro-animations, resizable window, and notifications.
 - **🤖 Automation (Auto Collect Eggs)**:
-  - High-efficiency farming loop: teleports directly to the assigned egg, collects it, tweens back to your plot base, and waits 1 second before teleporting to the next egg.
+  - Smooth round-trip farming loop: tweens to the assigned egg, collects it instantly upon arrival, tweens back to your plot base, and immediately repeats with the next egg.
   - **🍀 Egg Luck Filtering**: Filter eggs by minimum luck using flexible shorthand (e.g., `100`, `2k`, `1m`, `300b`) so only high-value targets are collected.
   - Live activity status indicator tracking current state, target, speed, and collected count.
 - **🧭 Egg Panel & Live ESP (Positioned below Movement)**:
@@ -43,10 +43,10 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
     - **Auto Collect Index**: Continuously and automatically claims available Index pet discovery rewards.
     - **Auto Rebirth**: Automatically checks both Cash and Pet requirements against game data (`Rebirths` and `General.RebirthRequirements`) before triggering Rebirth, completely eliminating notification spam when requirements are unmet.
     - **Auto Upgrade Hatch Luck**: Automatically buys Hatch Luck upgrades on your plot whenever affordable.
-- **⚡ Instant Return Tween Speed Control (0 to 350 studs/s)**:
-  - Responsive **Return Tween Speed** slider (0 to 350 studs/s) that applies changes instantly to live tween navigation without requiring a restart or refresh.
-- **🚀 Teleport & Return Tween Navigation Engine**:
-  - Direct teleport to target egg for instant interaction, followed by smooth CFrame interpolation with anti-gravity stabilization and noclip back to the player's plot, pausing 1 second before the next cycle.
+- **⚡ Instant Movement Speed Control (0 to 350 studs/s)**:
+  - Responsive **Movement Speed** slider (0 to 350 studs/s) that applies changes instantly to live tween navigation without requiring a restart or refresh.
+- **🚀 Pure Tween Navigation Engine**:
+  - Smooth CFrame interpolation with anti-gravity stabilization and noclip as the standard engine for round-trip farming (tween to egg, instant collect, tween to base, and immediate loop repeat).
 - **🔔 Discord Webhook Integration**:
   - Dedicated **Webhook** tab to enter your channel's webhook URL with a **Test Webhook Notification** button.
   - **Default Safeguards & Stats**:
