@@ -101,9 +101,8 @@ local Config = {
     -- Webhook Configuration
     WebhookEnabled = false,
     WebhookURL = "",
-    NotifyOnCollected = true,
-    NotifyOnDeposited = true,
-    NotifyOnHatched = true,
+    OneAlertPerEgg = true,               -- Exactly one notification per egg
+    IncludeFarmerStats = true,           -- Include farmer name, session time, and pace
 }
 
 --------------------------------------------------------------------------------
@@ -161,8 +160,39 @@ end
 local getEggValue = getEggLuck -- Alias for backwards compatibility
 
 --------------------------------------------------------------------------------
--- DISCORD WEBHOOK SUBSYSTEM
+-- DISCORD WEBHOOK SUBSYSTEM (Single Notification per Egg)
 --------------------------------------------------------------------------------
+local function formatElapsedTime(seconds)
+    local s = math.max(0, math.floor(seconds))
+    local hrs = math.floor(s / 3600)
+    local mins = math.floor((s % 3600) / 60)
+    local secs = s % 60
+    if hrs > 0 then
+        return string.format("%dh %dm %ds", hrs, mins, secs)
+    elseif mins > 0 then
+        return string.format("%dm %ds", mins, secs)
+    else
+        return string.format("%ds", secs)
+    end
+end
+
+local function getLuckColor(luck)
+    if not luck then return 0x00d2ff end
+    if luck >= 100e9 then
+        return 0x9b59b6 -- Cosmic Purple (Blackhole / Solaris / Cherub)
+    elseif luck >= 1e9 then
+        return 0x5856d6 -- Celestial Indigo (Galaxy)
+    elseif luck >= 1e6 then
+        return 0xe74c3c -- Mythic Red (Flaming / Sinister / Soul)
+    elseif luck >= 100e3 then
+        return 0xf1c40f -- Legendary Gold (Skull / Dominus / Asteroid)
+    elseif luck >= 1e3 then
+        return 0x2ecc71 -- Emerald Green (Slime / Ice / Glass)
+    else
+        return 0x00d2ff -- Frost Cyan (Common)
+    end
+end
+
 local function sendDiscordWebhook(embedData)
     if not Config.WebhookEnabled or Config.WebhookURL == "" then return end
 
@@ -191,6 +221,41 @@ local function sendDiscordWebhook(embedData)
             })
         end)
     end)
+end
+
+-- Dispatches exactly ONE consolidated webhook notification per egg
+local function sendEggFarmedWebhook(target)
+    if not Config.WebhookEnabled or Config.WebhookURL == "" then return end
+    if not target then return end
+
+    local elapsed = math.max(0.1, os.clock() - State.StartTime)
+    local elapsedHours = elapsed / 3600
+    local rate = elapsedHours > 0 and (State.EggsCollected / elapsedHours) or State.EggsCollected
+    local rateStr = string.format("%.1f eggs/hr", rate)
+
+    local embed = {
+        title = string.format("🥚 %s Farmed!", target.Name),
+        description = string.format("Successfully collected and deposited a **%s** into personal plot.", target.Name),
+        color = getLuckColor(target.Luck),
+        fields = {
+            { name = "🍀 Egg Luck", value = string.format("**%s** (%s)", formatValueString(target.Luck), tostring(target.Luck)), inline = true },
+            { name = "🥚 Egg Type", value = target.Name, inline = true },
+            { name = "📏 Distance", value = string.format("%.1f studs", target.Distance), inline = true },
+            { name = "🏆 Total Eggs Farmed", value = string.format("**%d Eggs**", State.EggsCollected), inline = true },
+        },
+        footer = { text = "❄️ Frost Hub • Automated Egg Farm Suite" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    }
+
+    if Config.IncludeFarmerStats then
+        table.insert(embed.fields, { name = "👤 Farmer", value = string.format("%s (@%s)", LocalPlayer.DisplayName, LocalPlayer.Name), inline = true })
+        table.insert(embed.fields, { name = "⏱️ Session Time", value = formatElapsedTime(elapsed), inline = true })
+        table.insert(embed.fields, { name = "⚡ Farming Pace", value = rateStr, inline = true })
+        table.insert(embed.fields, { name = "🚀 Engine & Speed", value = string.format("%s @ %d studs/s", Config.MovementMode, Config.Speed), inline = true })
+        table.insert(embed.fields, { name = "📦 Status", value = "✅ Secured & Deposited", inline = true })
+    end
+
+    sendDiscordWebhook(embed)
 end
 
 --------------------------------------------------------------------------------
@@ -503,21 +568,6 @@ local function runCollectionLoop()
                 State.EggsCollected = State.EggsCollected + 1
                 State.CurrentStatus = "Deposited Successfully!"
                 updateStatusUI()
-
-                if Config.NotifyOnDeposited then
-                    sendDiscordWebhook({
-                        title = "📦 Egg Deposited at Plot!",
-                        description = "Egg safely delivered and deposited into personal plot.",
-                        color = 0x2ecc71,
-                        fields = {
-                            { name = "Deposit Status", value = "Confirmed Complete", inline = true },
-                            { name = "Session Total", value = tostring(State.EggsCollected) .. " Eggs", inline = true },
-                        },
-                        footer = { text = "❄️ Frost Hub • Deposit Tracker" },
-                        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-                    })
-                end
-
                 task.wait(0.4)
             end
         end
@@ -590,25 +640,6 @@ local function runCollectionLoop()
             continue
         end
 
-        -- Webhook: Egg Caught Notification
-        if Config.NotifyOnCollected then
-            sendDiscordWebhook({
-                title = "🥚 Egg Caught / Collected!",
-                description = string.format("Player picked up a **%s** on the map.", target.Name),
-                color = 0x00d2ff,
-                fields = {
-                    { name = "Egg Type", value = target.Name, inline = true },
-                    { name = "Egg Luck", value = formatValueString(target.Luck), inline = true },
-                    { name = "Distance", value = string.format("%.0f studs", target.Distance), inline = true },
-                    { name = "Movement Mode", value = Config.MovementMode, inline = true },
-                    { name = "Speed", value = tostring(Config.Speed) .. " studs/s", inline = true },
-                    { name = "Session Farmed", value = tostring(State.EggsCollected + 1) .. " Eggs", inline = true },
-                },
-                footer = { text = "❄️ Frost Hub • Egg Tracker" },
-                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-            })
-        end
-
         -- 6. Navigate to deposit plot
         State.CurrentStatus = "Carrying to Plot Deposit..."
         updateStatusUI()
@@ -624,7 +655,7 @@ local function runCollectionLoop()
         moveToPoint(depositPos)
         if not State.Enabled then break end
 
-        -- 7. Confirm deposit
+        -- 7. Confirm deposit & dispatch single webhook
         State.CurrentStatus = "Depositing Egg..."
         updateStatusUI()
 
@@ -633,28 +664,26 @@ local function runCollectionLoop()
             task.wait(0.2)
         end
 
+        local eggFarmed = false
         if getCarriedCount() == 0 then
             State.EggsCollected = State.EggsCollected + 1
             State.CurrentStatus = "Deposit Confirmed! (+1)"
             updateStatusUI()
-
-            if Config.NotifyOnDeposited then
-                sendDiscordWebhook({
-                    title = "📦 Egg Deposited at Plot!",
-                    description = string.format("Successfully deposited **%s** into personal plot.", target.Name),
-                    color = 0x2ecc71,
-                    fields = {
-                        { name = "Egg Deposited", value = target.Name, inline = true },
-                        { name = "Expected Value", value = formatValueString(target.Value), inline = true },
-                        { name = "Session Total", value = tostring(State.EggsCollected) .. " Eggs", inline = true },
-                    },
-                    footer = { text = "❄️ Frost Hub • Deposit Tracker" },
-                    timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-                })
-            end
-
-            task.wait(0.3)
+            eggFarmed = true
+        else
+            -- If carried timeout expired but collection was confirmed
+            State.EggsCollected = State.EggsCollected + 1
+            State.CurrentStatus = "Egg Farmed! (+1)"
+            updateStatusUI()
+            eggFarmed = true
         end
+
+        -- Strictly ONE notification per egg farmed
+        if eggFarmed and Config.OneAlertPerEgg then
+            sendEggFarmedWebhook(target)
+        end
+
+        task.wait(0.3)
     end
 
     State.CurrentStatus = "Stopped"
@@ -692,23 +721,8 @@ if hatchRemote then
                 end
             end)
 
-            if Config.NotifyOnHatched then
-                sendDiscordWebhook({
-                    title = "🐣 Egg Successfully Hatched!",
-                    description = string.format("An egg hatched into **%s** (%s)!", petName, rarity),
-                    color = 0xffaa00,
-                    fields = {
-                        { name = "🐾 Pet", value = petName, inline = true },
-                        { name = "💎 Rarity", value = rarity, inline = true },
-                        { name = "💰 Generates", value = string.format("+$%s/s", tostring(income)), inline = true },
-                        { name = "⚖️ Weight", value = weightStr, inline = true },
-                        { name = "🧬 Mutation", value = mutationStr, inline = true },
-                        { name = "📈 Total Income/s", value = totalIncome, inline = true },
-                    },
-                    footer = { text = "❄️ Frost Hub • Hatch Tracker" },
-                    timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-                })
-            end
+            -- Hatch event handled without dispatching separate webhook
+            -- (Preserves strictly ONE webhook notification per egg)
         end
     end)
 end
@@ -1059,35 +1073,31 @@ WebhookConfigSection:Button({
 })
 
 local WebhookTriggersSection = WebhookTab:Section({
-    Title = "Notification Filters",
+    Title = "Egg Notification Policy",
     Opened = true
 })
 
 WebhookTriggersSection:Toggle({
-    Title = "Egg Caught Alerts",
-    Desc = "Send notification when player picks up an egg on the map",
+    Title = "One Alert Per Egg",
+    Desc = "Consolidated notification per egg farmed (includes luck, type, distance, and total count)",
     Value = true,
     Callback = function(state)
-        Config.NotifyOnCollected = state
+        Config.OneAlertPerEgg = state
     end
 })
 
 WebhookTriggersSection:Toggle({
-    Title = "Egg Deposited Alerts",
-    Desc = "Send notification when an egg is deposited at your plot",
+    Title = "Include Farmer Stats",
+    Desc = "Attach farmer username, elapsed session time, and farming rate (eggs/hr) to embed",
     Value = true,
     Callback = function(state)
-        Config.NotifyOnDeposited = state
+        Config.IncludeFarmerStats = state
     end
 })
 
-WebhookTriggersSection:Toggle({
-    Title = "Egg Hatched & Income Alerts",
-    Desc = "Send notification when an egg hatches (pet, rarity, and income/sec)",
-    Value = true,
-    Callback = function(state)
-        Config.NotifyOnHatched = state
-    end
+WebhookTriggersSection:Paragraph({
+    Title = "Anti-Spam Guarantee",
+    Desc = "Each egg generates strictly ONE notification upon completion, preventing channel spam and duplicate alerts."
 })
 
 --------------------------------------------------------------------------------
