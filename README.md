@@ -72,7 +72,7 @@ The official Frost Hub Discord Bot manages community keys and announcements:
 - **ℹ️ `,info [#channel]`**: Sends official script info to a selected channel (e.g. `,info #general`), directs users to `<#1550589425497542676>` to claim their free 6-hour key, links support tickets to `<#1549104953463803934>`, and attaches an interactive **Supported Games** button displaying `Ride a Pet`. If run in or directed to the verification channel, automatically deploys verification setup.
 - **🔑 `,ck [@user] <duration>`**: Generate keys with custom durations (e.g. `,ck 7 days`, `,ck 24h`, `,ck lifetime` or `,ck @user 1w`). When pinging a user (e.g. `,ck @Pinguser 1w`), automatically delivers the key and instructions directly to their DMs, and sends the key embed to the channel so they still have access to it even if messages get deleted. Syncs immediately to GitHub and logs creation to `<#1550571106497470584>`. Restricted to role ID `1550567704925044858`.
 - **📋 `,keys [filter]`**: View all keys in a public embed with interactive **Previous** and **Next** page swipe buttons. Supports filters: `,keys active` (active keys only), `,keys revoked` (revoked keys only), `,keys expired` (expired keys only), or `,keys` (all keys). Restricted to role ID `1550567704925044858`.
-- **🚫 `/revoke key <key>`**: Instantly revoke keys with immediate GitHub sync and in-game cutoff (Admin restricted).
+- **🚫 `,rk <key>`**: Instantly revoke a script key with immediate GitHub sync and in-game cutoff (e.g. `,rk 423432423` or `,rk FROST-XXXX`). Restricted to role ID `1550567704925044858`.
 
 ### 📥 Load Script
 
