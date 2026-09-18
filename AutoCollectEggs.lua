@@ -2391,10 +2391,13 @@ pcall(function()
     end
 end)
 
--- Key System customization: rename button to "Get discord invite" and notify on click with instructions
+-- Key System customization: rename button to "Get discord invite", widen dialog for spacing, and notify on click
 task.spawn(function()
     local handledButtons = {}
-    local function setupKeyButton(desc)
+    local function setupKeySystem(desc)
+        if desc:IsA("Frame") and desc.Size.X.Offset == 430 then
+            desc.Size = UDim2.new(0, 500, 0, 0)
+        end
         if desc:IsA("TextLabel") and (desc.Text == "Get key" or desc.Text == "Copy key") then
             desc.Text = "Get discord invite"
             local btn = desc:FindFirstAncestorWhichIsA("TextButton") or (desc.Parent and desc.Parent:FindFirstAncestorWhichIsA("TextButton"))
@@ -2420,9 +2423,9 @@ task.spawn(function()
 
     if WindUI.ScreenGui and WindUI.ScreenGui:FindFirstChild("KeySystem") then
         for _, desc in ipairs(WindUI.ScreenGui.KeySystem:GetDescendants()) do
-            setupKeyButton(desc)
+            setupKeySystem(desc)
         end
-        WindUI.ScreenGui.KeySystem.DescendantAdded:Connect(setupKeyButton)
+        WindUI.ScreenGui.KeySystem.DescendantAdded:Connect(setupKeySystem)
     end
 end)
 
