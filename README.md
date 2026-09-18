@@ -10,7 +10,16 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
 
 ### ✨ Features
 - **💎 WindUI Interface**: Dark acrylic glassmorphism, fluid micro-animations, resizable window, and notifications.
-- **🍀 Egg Luck Filtering (NEW)**:
+- **🧭 Egg Panel (Live Radar & Reset Tracker) (NEW)**:
+  - Dedicated **Egg Panel** tab and **Open Panel** button in the HUD.
+  - Standalone emerald-themed radar modal displaying:
+    - **Every Available Egg**: Real-time catalog of all eggs currently spawned across the entire map.
+    - **Individual Egg Luck**: Exact and shorthand luck values for each egg (e.g., `1K`, `250K`, `1M`, `3M`, `1.5B`, `100B Luck`).
+    - **Egg Type & Rarity Tier**: Egg type name, rarity category, live count on the map, and distance to the player in studs.
+    - **Live Reset Countdown**: Real-time timer showing the exact time remaining until eggs reset/refresh (`Next Reset: Xm Ys`).
+    - **Automatic 1-Second Updates**: Live background loop continuously synchronizes egg data, counts, and countdown without stuttering or lag.
+    - **Instant Filter & Search**: Quick-filter pills (`Any`, `Ethereal`, `Divine`, `Mythic`, `Legendary`, `Epic`, `Rare`, `Common`) and real-time search box.
+- **🍀 Egg Luck Filtering**:
   - Toggle **Collect by Luck** directly in the **Auto Collect** tab.
   - Set a minimum luck threshold using the **Egg Luck** input box with flexible shorthand formats (e.g., `100`, `2k`, `1m`, `300b`).
   - Each egg on the map has its own luck value (e.g. Slime Egg = 1k, Skull Egg = 250k, Flaming Egg = 1m, Sinister Egg = 3m, Galaxy Egg = 1.5b, Blackhole Egg = 100b).
