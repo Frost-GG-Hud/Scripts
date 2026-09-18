@@ -67,7 +67,7 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
 ### 🤖 Discord Bot Commands & Key System
 
 The official Frost Hub Discord Bot manages community keys and announcements:
-- **🎁 `/claim key`**: Available to **everyone**. Claims a free **6-hour key** in <#1550589425497542676>. Each key remains valid for 6 hours; once expired, users simply run `/claim key` again.
+- **🎁 `/claim key`**: Available to **everyone**. DMs the user with their personal **6-hour key** in <#1550589425497542676>. Automatically sends a follow-up DM when the key expires after 6 hours reminding them to claim a new one. Enforces a strict **one key per 6 hours** cooldown per user (bypassed by role ID `1550567704925044858`).
 - **ℹ️ `/info [channel]`**: Sends official script info to a selected channel (color `#86C9E6`), directs users to `<#1550589425497542676>` to claim their free 6-hour key, and attaches an interactive **Supported Games** button displaying `Ride a Pet`.
 - **🔑 `/create key <length>`**: Generate keys with custom durations (Admin restricted).
 - **📋 `/keys [filter]`**: View all active, expired, and revoked keys with audit data (Admin restricted).
