@@ -9,6 +9,13 @@ Advanced gameplay automation, testing, and webhook integration suite for Roblox.
 A high-performance prototyping system built on [WindUI](https://github.com/Footagesus/WindUI) with acrylic glassmorphism, responsive sidebar tabs, unified speed control, Egg Luck filtering, and Discord webhooks.
 
 ### ✨ Features
+- **ℹ️ Information Tab (Primary Landing Tab)**:
+  - Automatically selected and opened immediately upon entering a valid script key.
+  - **Hub Version**: Current hub version `V 0.1`.
+  - **License & Key Validity**: Live remaining key duration formatted dynamically in days, hours, and minutes, or permanent `Lifetime (Permanent - Never Expires)` display with instant recalculation button.
+  - **Discord Community**: Direct invite to our official Discord server (`https://discord.gg/xGfTjURZVb`) with a 1-click clipboard copy button.
+  - **Support & Tutorials**: Fast access to support tickets and directions to the key tutorial in `#get-script-key`.
+  - **Farmer & Session Details**: Displays player username, display name, account age, place ID, and quick keybind reference.
 - **💎 WindUI Interface**: Dark acrylic glassmorphism, fluid micro-animations, resizable window, and notifications.
 - **🤖 Automation (formerly Auto Collect)**:
   - Full hands-free farming loop: scans eggs, walks/tweens to target, interacts, and deposits at your plot.
