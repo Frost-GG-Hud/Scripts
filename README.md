@@ -42,19 +42,20 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
   - **Walk (Pathfinding)**: PathfindingService with smart fence/gate routing and auto-jumping.
   - **Walk (Direct)**: Direct line-of-sight sprint towards target.
   - **Tween (Smooth)**: CFrame interpolation with anti-gravity stabilization and optional noclip.
-- **🔔 Discord Webhook Integration (Single Alert per Egg)**:
-  - Dedicated **Webhook** tab to enter your channel's webhook URL.
-  - Test button to verify connection.
-  - **Single Notification Policy**: Dispatches strictly **one consolidated webhook notification per egg farmed**, eliminating duplicate alerts.
-  - **Comprehensive Embed Data**:
-    - **🍀 Egg Luck**: Formatted luck multiplier and exact value (e.g. `1.5B (1500000000)`).
-    - **🥚 Egg Type**: Precise name of the collected egg.
-    - **📏 Distance**: Travel distance from pickup position to target.
-    - **🏆 Total Eggs Farmed**: Accurate running count of eggs farmed in the current session.
-    - **👤 Farmer Info**: In-game DisplayName and Username (ideal for multi-account farming).
-    - **⏱️ Session Time & Pace**: Active session duration and real-time farming rate (`eggs/hr`).
-    - **🚀 Movement Diagnostics**: Active engine and speed used.
-    - **🎨 Dynamic Luck Theming**: Embed color dynamically shifts according to egg rarity and luck tier.
+- **🔔 Discord Webhook Integration**:
+  - Dedicated **Webhook** tab to enter your channel's webhook URL with a **Test Webhook Notification** button.
+  - **Default Safeguards & Stats**:
+    - **Strictly One Alert Per Egg**: Default policy prevents duplicate alerts or spam.
+    - **Automatic Farmer Statistics**: Farmer DisplayName/Username, session elapsed time, farming pace (`eggs/hr`), engine, and speed are automatically bundled.
+  - **🥚 Egg Notifications**:
+    - Toggle to enable or disable egg farming embeds.
+    - When enabled, sends comprehensive stats whenever an egg is collected and deposited.
+    - When disabled, egg alerts are suppressed while keeping other alerts active.
+  - **🌦️ Weather Notifications**:
+    - Sends an initial **Current Weather Report** embed as soon as the webhook starts or is enabled.
+    - Continuously tracks live server storms (`ServerData.ActiveWeathers`) and sends instantaneous notifications on every weather event (e.g. Thunderstorm, Volt Tempest, Raging Inferno, Dreadful Void, Eternal Storm, Gigantuar).
+    - Sends dynamic alerts when weather changes between storms or when skies clear.
+    - Displays granted egg mutations, storm rarity/chance, and live countdown timer until storm expiration (`<t:EndsAt:R>`).
 
 ### 📥 Load Script
 
