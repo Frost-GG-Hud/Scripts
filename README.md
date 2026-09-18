@@ -64,6 +64,15 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
     - Sends dynamic alerts when weather changes between storms or when skies clear.
     - Displays granted egg mutations, storm rarity/chance, and live countdown timer until storm expiration (`<t:EndsAt:R>`).
 
+### 🤖 Discord Bot Commands & Key System
+
+The official Frost Hub Discord Bot manages community keys and announcements:
+- **🎁 `/claim key`**: Available to **everyone**. Claims a free **6-hour key** in <#1550589425497542676>. Each key remains valid for 6 hours; once expired, users simply run `/claim key` again.
+- **ℹ️ `/info [channel]`**: Sends official script info to a selected channel (color `#86C9E6`), directs users to `<#1550589425497542676>` to claim their free 6-hour key, and attaches an interactive **Supported Games** button displaying `Ride a Pet`.
+- **🔑 `/create key <length>`**: Generate keys with custom durations (Admin restricted).
+- **📋 `/keys [filter]`**: View all active, expired, and revoked keys with audit data (Admin restricted).
+- **🚫 `/revoke key <key>`**: Instantly revoke keys with immediate GitHub sync and in-game cutoff (Admin restricted).
+
 ### 📥 Load Script
 
 ```lua
@@ -74,3 +83,4 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/Frost-GG-Hud/Scripts/
 - **Toggle Window**: Press `RightControl` or `RightShift` to show or hide the HUD.
 - **Resize Window**: Drag the bottom-right resize handle or adjust **HUD Scale** in Settings.
 - **Move Window**: Drag anywhere on the title header.
+
