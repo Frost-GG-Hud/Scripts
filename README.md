@@ -1,19 +1,27 @@
 # ❄️ Frost Hub - Scripts Repository
 
-Collection of gameplay automation, testing, and utility Luau scripts for Roblox.
+Advanced gameplay automation, testing, and utility Luau scripts for Roblox.
 
 ---
 
-## 🥚 Auto Collect Eggs
+## 🥚 Auto Collect Eggs (WindUI Edition)
 
-A legitimate prototype gameplay testing feature that automates the egg collection and deposit loop using standard Roblox movement and interaction mechanics:
+A high-performance prototyping system built on [WindUI](https://github.com/Footagesus/WindUI) with acrylic glassmorphism, responsive sidebar tabs, and multi-modal movement engines:
 
-1. **Egg Detection**: Queries server-spawned eggs (RenderedEggs / ActiveEggs) and selects eligible targets based on proximity and interactive state.
-2. **Natural Pathfinding**: Navigates using PathfindingService and Humanoid:MoveTo with jump handling and stuck detection.
-3. **Legitimate Interaction**: Triggers the egg's ProximityPrompt without bypassing validation.
-4. **Carried State Validation**: Awaits server confirmation via player.Basket.
-5. **Deposit Navigation**: Paths player to their designated plot baseplate.
-6. **Deposit Confirmation**: Confirms basket clearance on deposit and repeats.
+### ✨ Features
+- **🎨 WindUI Design**: Translucent dark acrylic theme, tabbed navigation, smooth animations, resizable window, and notifications.
+- **⚡ Multiple Movement Systems**:
+  - **Walk (Pathfinding)**: Uses PathfindingService with waypoint tracking and automatic obstacle hopping.
+  - **Walk (Direct)**: Straight-line speed sprint towards target.
+  - **Tween (Smooth Glide)**: Smooth CFrame interpolation with anti-gravity stabilization and optional noclip.
+- **🏎️ Configurable Speeds (1 to 400)**:
+  - **Walk Speed Slider**: Adjusts Humanoid walk speed from 1 to 400 studs/s.
+  - **Tween Speed Slider**: Configures glide speed from 1 to 400 studs/s.
+- **🛡️ Server-Validated Loop**:
+  - Detects eggs from server-replicated state (workspace.RenderedEggs).
+  - Triggers standard ProximityPrompt collection.
+  - Verifies carried state in player.Basket.
+  - Automatically navigates to player's designated plot baseplate and confirms deposit.
 
 ### 🚀 Load Script
 
@@ -22,6 +30,6 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/Frost-GG-Hud/Scripts/
 `
 
 ### 🎮 Controls
-- **Toggle Button**: Click the switch in the UI to enable / disable.
-- **Toggle UI**: Press RightControl to show or hide the HUD.
-- **Draggable Window**: Drag anywhere on the title bar to reposition.
+- **Toggle Window**: Press RightControl or RightShift to show or hide the HUD.
+- **Resize Window**: Drag the bottom-right resize handle or adjust **HUD Scale** in Settings.
+- **Move Window**: Drag anywhere on the title header.
