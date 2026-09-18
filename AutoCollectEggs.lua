@@ -394,6 +394,23 @@ end
 --------------------------------------------------------------------------------
 -- MODERN FROST-THEMED UI
 --------------------------------------------------------------------------------
+-- Cleanup previous instances if running
+pcall(function()
+    if gethui then
+        for _, c in ipairs(gethui():GetChildren()) do
+            if c.Name == "FrostHub_AutoCollectEggs" then c:Destroy() end
+        end
+    end
+    for _, c in ipairs(CoreGui:GetChildren()) do
+        if c.Name == "FrostHub_AutoCollectEggs" then c:Destroy() end
+    end
+    if LocalPlayer:FindFirstChild("PlayerGui") then
+        for _, c in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+            if c.Name == "FrostHub_AutoCollectEggs" then c:Destroy() end
+        end
+    end
+end)
+
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "FrostHub_AutoCollectEggs"
 ScreenGui.ResetOnSpawn = false
@@ -424,6 +441,11 @@ MainCard.Active = true
 MainCard.ClipsDescendants = true
 MainCard.Parent = ScreenGui
 
+-- UI Scaling Controller (Enables resizing/expanding HUD)
+local CardScale = Instance.new("UIScale")
+CardScale.Scale = 1.0
+CardScale.Parent = MainCard
+
 local CardCorner = Instance.new("UICorner")
 CardCorner.CornerRadius = UDim.new(0, 14)
 CardCorner.Parent = MainCard
@@ -448,15 +470,76 @@ HeaderCorner.Parent = Header
 
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Name = "Title"
-TitleLabel.Size = UDim2.new(1, -50, 1, 0)
+TitleLabel.Size = UDim2.new(1, -78, 1, 0)
 TitleLabel.Position = UDim2.fromOffset(14, 0)
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Text = "❄️ Frost Hub | Auto Collect"
 TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.TextSize = 14
+TitleLabel.TextSize = 13
 TitleLabel.TextColor3 = Color3.fromRGB(220, 238, 255)
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Parent = Header
+
+-- Top-Right Controls Container (Resize / Close)
+local HeaderControls = Instance.new("Frame")
+HeaderControls.Name = "HeaderControls"
+HeaderControls.Size = UDim2.fromOffset(60, 26)
+HeaderControls.AnchorPoint = Vector2.new(1, 0.5)
+HeaderControls.Position = UDim2.new(1, -8, 0.5, 0)
+HeaderControls.BackgroundTransparency = 1
+HeaderControls.Parent = Header
+
+local ControlsLayout = Instance.new("UIListLayout")
+ControlsLayout.FillDirection = Enum.FillDirection.Horizontal
+ControlsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+ControlsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+ControlsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ControlsLayout.Padding = UDim.new(0, 5)
+ControlsLayout.Parent = HeaderControls
+
+-- Resize Button (Makes HUD bigger)
+local SizeBtn = Instance.new("TextButton")
+SizeBtn.Name = "SizeButton"
+SizeBtn.Size = UDim2.fromOffset(26, 26)
+SizeBtn.BackgroundColor3 = Color3.fromRGB(28, 38, 58)
+SizeBtn.AutoButtonColor = false
+SizeBtn.Text = "⤢"
+SizeBtn.Font = Enum.Font.GothamBold
+SizeBtn.TextSize = 13
+SizeBtn.TextColor3 = Color3.fromRGB(170, 210, 255)
+SizeBtn.LayoutOrder = 1
+SizeBtn.Parent = HeaderControls
+
+local SizeCorner = Instance.new("UICorner")
+SizeCorner.CornerRadius = UDim.new(0, 6)
+SizeCorner.Parent = SizeBtn
+
+local SizeStroke = Instance.new("UIStroke")
+SizeStroke.Color = Color3.fromRGB(45, 68, 105)
+SizeStroke.Thickness = 1
+SizeStroke.Parent = SizeBtn
+
+-- Close Button (Closes HUD)
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Name = "CloseButton"
+CloseBtn.Size = UDim2.fromOffset(26, 26)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(28, 38, 58)
+CloseBtn.AutoButtonColor = false
+CloseBtn.Text = "✕"
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 11
+CloseBtn.TextColor3 = Color3.fromRGB(170, 210, 255)
+CloseBtn.LayoutOrder = 2
+CloseBtn.Parent = HeaderControls
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+local CloseStroke = Instance.new("UIStroke")
+CloseStroke.Color = Color3.fromRGB(45, 68, 105)
+CloseStroke.Thickness = 1
+CloseStroke.Parent = CloseBtn
 
 -- Content Container
 local Content = Instance.new("Frame")
@@ -671,6 +754,138 @@ ToggleRow.MouseButton1Click:Connect(function()
     setToggle(not State.Enabled)
 end)
 
+-- Floating Open Pill (Allows reopening HUD when closed)
+local FloatingPill = Instance.new("TextButton")
+FloatingPill.Name = "FloatingOpenPill"
+FloatingPill.Size = UDim2.fromOffset(132, 34)
+FloatingPill.Position = UDim2.new(0.04, 0, 0.28, 0)
+FloatingPill.BackgroundColor3 = Color3.fromRGB(18, 26, 42)
+FloatingPill.AutoButtonColor = false
+FloatingPill.Text = "❄️ Open HUD"
+FloatingPill.Font = Enum.Font.GothamBold
+FloatingPill.TextSize = 12
+FloatingPill.TextColor3 = Color3.fromRGB(190, 230, 255)
+FloatingPill.Visible = false
+FloatingPill.Parent = ScreenGui
+
+local PillCorner = Instance.new("UICorner")
+PillCorner.CornerRadius = UDim.new(0, 10)
+PillCorner.Parent = FloatingPill
+
+local PillStroke = Instance.new("UIStroke")
+PillStroke.Color = Color3.fromRGB(35, 75, 125)
+PillStroke.Thickness = 1.2
+PillStroke.Parent = FloatingPill
+
+-- Dragging for Floating Pill
+local pillDragging, pillDragStart, pillStartPos = false, nil, nil
+FloatingPill.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        pillDragging = true
+        pillDragStart = input.Position
+        pillStartPos = FloatingPill.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                pillDragging = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if pillDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - pillDragStart
+        FloatingPill.Position = UDim2.new(
+            pillStartPos.X.Scale,
+            pillStartPos.X.Offset + delta.X,
+            pillStartPos.Y.Scale,
+            pillStartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- HUD Resizing Logic (Normal 1.0x -> Big 1.3x -> Extra Big 1.55x)
+local scaleLevels = { 1.0, 1.3, 1.55 }
+local currentScaleIndex = 1
+
+SizeBtn.MouseButton1Click:Connect(function()
+    currentScaleIndex = (currentScaleIndex % #scaleLevels) + 1
+    local targetScale = scaleLevels[currentScaleIndex]
+
+    TweenService:Create(CardScale, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        Scale = targetScale
+    }):Play()
+
+    if currentScaleIndex == 1 then
+        SizeBtn.Text = "⤢"
+        SizeBtn.TextColor3 = Color3.fromRGB(170, 210, 255)
+    else
+        SizeBtn.Text = "⤡"
+        SizeBtn.TextColor3 = Color3.fromRGB(0, 215, 255)
+    end
+end)
+
+SizeBtn.MouseEnter:Connect(function()
+    TweenService:Create(SizeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(45, 65, 95)}):Play()
+end)
+SizeBtn.MouseLeave:Connect(function()
+    TweenService:Create(SizeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(28, 38, 58)}):Play()
+end)
+
+-- HUD Close Logic
+local function closeHUD()
+    local closeTween = TweenService:Create(CardScale, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+        Scale = 0.8
+    })
+    closeTween:Play()
+    closeTween.Completed:Connect(function()
+        MainCard.Visible = false
+        CardScale.Scale = scaleLevels[currentScaleIndex]
+    end)
+    FloatingPill.Visible = true
+end
+
+local function openHUD()
+    FloatingPill.Visible = false
+    MainCard.Visible = true
+    CardScale.Scale = 0.85
+    TweenService:Create(CardScale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Scale = scaleLevels[currentScaleIndex]
+    }):Play()
+end
+
+CloseBtn.MouseButton1Click:Connect(function()
+    closeHUD()
+end)
+
+CloseBtn.MouseEnter:Connect(function()
+    TweenService:Create(CloseBtn, TweenInfo.new(0.15), {
+        BackgroundColor3 = Color3.fromRGB(150, 35, 45),
+        TextColor3 = Color3.fromRGB(255, 255, 255)
+    }):Play()
+    TweenService:Create(CloseStroke, TweenInfo.new(0.15), {Color = Color3.fromRGB(230, 60, 75)}):Play()
+end)
+
+CloseBtn.MouseLeave:Connect(function()
+    TweenService:Create(CloseBtn, TweenInfo.new(0.15), {
+        BackgroundColor3 = Color3.fromRGB(28, 38, 58),
+        TextColor3 = Color3.fromRGB(170, 210, 255)
+    }):Play()
+    TweenService:Create(CloseStroke, TweenInfo.new(0.15), {Color = Color3.fromRGB(45, 68, 105)}):Play()
+end)
+
+FloatingPill.MouseButton1Click:Connect(function()
+    openHUD()
+end)
+
+FloatingPill.MouseEnter:Connect(function()
+    TweenService:Create(FloatingPill, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(30, 42, 68)}):Play()
+end)
+FloatingPill.MouseLeave:Connect(function()
+    TweenService:Create(FloatingPill, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(18, 26, 42)}):Play()
+end)
+
 -- Draggable implementation
 local dragging, dragStart, startPos = false, nil, nil
 Header.InputBegan:Connect(function(input)
@@ -699,10 +914,14 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Hotkey to toggle UI visibility
+-- Hotkey to toggle UI visibility (RightControl)
 UserInputService.InputBegan:Connect(function(input, processed)
     if not processed and input.KeyCode == Enum.KeyCode.RightControl then
-        MainCard.Visible = not MainCard.Visible
+        if MainCard.Visible then
+            closeHUD()
+        else
+            openHUD()
+        end
     end
 end)
 
