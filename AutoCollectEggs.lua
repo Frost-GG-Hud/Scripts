@@ -828,11 +828,28 @@ local function getActiveEggData()
         })
     end
 
+    local RARITY_TIER_WEIGHT = {
+        Ethereal  = 7,
+        Divine    = 6,
+        Mythic    = 5,
+        Legendary = 4,
+        Epic      = 3,
+        Rare      = 2,
+        Common    = 1,
+    }
+
     table.sort(list, function(a, b)
-        if a.Luck ~= b.Luck then
-            return a.Luck > b.Luck
+        local tierA = RARITY_TIER_WEIGHT[a.Rarity] or 0
+        local tierB = RARITY_TIER_WEIGHT[b.Rarity] or 0
+        if tierA ~= tierB then
+            return tierA > tierB
         end
-        return a.Distance < b.Distance
+        local luckA = a.Luck or 0
+        local luckB = b.Luck or 0
+        if luckA ~= luckB then
+            return luckA > luckB
+        end
+        return tostring(a.Name) < tostring(b.Name)
     end)
 
     return list
@@ -853,7 +870,7 @@ local EggPanel = {
     MainFrame = nil,
     IsOpen = false,
     SearchQuery = "",
-    ActiveFilter = "Any",
+    ActiveFilter = "All",
     ResetLabel = nil,
     SearchBox = nil,
     FilterButtons = {},
@@ -1121,6 +1138,7 @@ function EggPanel:Init()
 
     local searchBox = Instance.new("TextBox")
     searchBox.Name = "SearchBox"
+    searchBox.Text = "" -- Ensure empty string so only the placeholder displays
     searchBox.Size = UDim2.new(1, -88, 1, 0)
     searchBox.Position = UDim2.new(0, 32, 0, 0)
     searchBox.BackgroundTransparency = 1
@@ -1186,18 +1204,21 @@ function EggPanel:Init()
 
     local filterLayout = Instance.new("UIListLayout")
     filterLayout.FillDirection = Enum.FillDirection.Horizontal
+    filterLayout.SortOrder = Enum.SortOrder.LayoutOrder
     filterLayout.Padding = UDim.new(0, 6)
     filterLayout.VerticalAlignment = Enum.VerticalAlignment.Center
     filterLayout.Parent = filterScroll
 
-    local filters = { "Any", "Divine", "Ethereal", "Mythic", "Legendary", "Epic", "Rare", "Common" }
+    -- Ordered: "All" first, then highest rarity to lowest (Ethereal down to Common)
+    local filters = { "All", "Ethereal", "Divine", "Mythic", "Legendary", "Epic", "Rare", "Common" }
     self.FilterButtons = {}
 
-    for _, fName in ipairs(filters) do
+    for i, fName in ipairs(filters) do
         local pill = Instance.new("TextButton")
         pill.Name = "Pill_" .. fName
         pill.Text = fName
-        pill.Size = UDim2.new(0, fName == "Any" and 48 or 64, 0, 26)
+        pill.LayoutOrder = i
+        pill.Size = UDim2.new(0, (fName == "All" or fName == "Any") and 46 or 64, 0, 26)
         pill.TextSize = 11
         pill.BorderSizePixel = 0
         pill.Parent = filterScroll
@@ -1282,11 +1303,12 @@ function EggPanel:RenderCards()
 
     local eggs = self.LastEggList or {}
     local query = self.SearchQuery or ""
-    local filter = self.ActiveFilter or "Any"
+    local filter = self.ActiveFilter or "All"
+    local isAll = (filter == "All" or filter == "Any")
 
     local visibleCount = 0
     for i, egg in ipairs(eggs) do
-        local matchesFilter = (filter == "Any") or (string.lower(egg.Rarity) == string.lower(filter))
+        local matchesFilter = isAll or (string.lower(egg.Rarity) == string.lower(filter))
         local matchesSearch = (query == "")
             or string.find(string.lower(egg.Name), query, 1, true)
             or string.find(string.lower(egg.Rarity), query, 1, true)
@@ -1463,6 +1485,10 @@ end
 function EggPanel:Open()
     if not self.Gui then
         self:Init()
+    end
+    if self.SearchBox then
+        self.SearchBox.Text = ""
+        self.SearchQuery = ""
     end
     self.Gui.Enabled = true
     self.IsOpen = true
