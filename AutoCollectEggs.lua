@@ -2306,6 +2306,47 @@ local function fetchValidKeys()
     return {}
 end
 
+local DISCORD_INVITE_URL = "https://discord.gg/xGfTjURZVb"
+
+local ValidatedKeyData = {
+    Key = "FREEKEY-FROST-3432432-4324324",
+    Duration = "Lifetime",
+    ExpiresAt = nil,
+    ValidatedAt = os.time()
+}
+
+local function formatKeyRemaining()
+    if not ValidatedKeyData.ExpiresAt or ValidatedKeyData.ExpiresAt <= 0 then
+        return "Lifetime (Permanent - Never Expires)"
+    end
+    local remaining = ValidatedKeyData.ExpiresAt - os.time()
+    if remaining <= 0 then
+        return "Expired (Re-enter new key)"
+    end
+    local days = math.floor(remaining / 86400)
+    local hours = math.floor((remaining % 86400) / 3600)
+    local minutes = math.floor((remaining % 3600) / 60)
+    local seconds = remaining % 60
+    
+    local parts = {}
+    if days > 0 then
+        table.insert(parts, string.format("%d day%s", days, days == 1 and "" or "s"))
+    end
+    if hours > 0 then
+        table.insert(parts, string.format("%d hour%s", hours, hours == 1 and "" or "s"))
+    end
+    if minutes > 0 then
+        table.insert(parts, string.format("%d minute%s", minutes, minutes == 1 and "" or "s"))
+    end
+    if #parts == 0 then
+        table.insert(parts, string.format("%d second%s", seconds, seconds == 1 and "" or "s"))
+    end
+    return table.concat(parts, ", ") .. " remaining"
+end
+
+local InfoTab = nil
+local updateInfoSection = nil
+
 local function validateFrostKey(inputKey)
     if not inputKey or inputKey == "" then return false end
     local cleanKey = string.gsub(string.upper(tostring(inputKey)), "%s+", "")
@@ -2336,26 +2377,69 @@ local function validateFrostKey(inputKey)
                     })
                     return false
                 else
+                    ValidatedKeyData.Key = cleanKey
+                    ValidatedKeyData.ExpiresAt = expiresAt
+                    ValidatedKeyData.Duration = "Temporary"
+                    ValidatedKeyData.ValidatedAt = currentTime
                     local remaining = expiresAt - currentTime
                     local days = math.floor(remaining / 86400)
                     local hours = math.floor((remaining % 86400) / 3600)
-                    local timeStr = days > 0 and string.format("%dd %dh", days, hours) or string.format("%dh", hours)
+                    local mins = math.floor((remaining % 3600) / 60)
+                    local timeStr = days > 0 and string.format("%dd %dh", days, hours) or (hours > 0 and string.format("%dh %dm", hours, mins) or string.format("%dm", mins))
                     WindUI:Notify({
                         Title = "Key System",
                         Content = "Access granted! Key valid for " .. timeStr .. ".",
                         Duration = 3,
                         Icon = "check-circle"
                     })
+                    if updateInfoSection then
+                        pcall(updateInfoSection)
+                    end
+                    task.defer(function()
+                        pcall(function()
+                            if InfoTab then
+                                InfoTab:Select()
+                            end
+                        end)
+                    end)
+                    task.delay(0.5, function()
+                        pcall(function()
+                            if InfoTab then
+                                InfoTab:Select()
+                            end
+                        end)
+                    end)
                     return true
                 end
             else
                 -- Lifetime key
+                ValidatedKeyData.Key = cleanKey
+                ValidatedKeyData.ExpiresAt = nil
+                ValidatedKeyData.Duration = "Lifetime"
+                ValidatedKeyData.ValidatedAt = currentTime
                 WindUI:Notify({
                     Title = "Key System",
                     Content = "Access granted! Lifetime key verified.",
                     Duration = 3,
                     Icon = "check-circle"
                 })
+                if updateInfoSection then
+                    pcall(updateInfoSection)
+                end
+                task.defer(function()
+                    pcall(function()
+                        if InfoTab then
+                            InfoTab:Select()
+                        end
+                    end)
+                end)
+                task.delay(0.5, function()
+                    pcall(function()
+                        if InfoTab then
+                            InfoTab:Select()
+                        end
+                    end)
+                end)
                 return true
             end
         end
@@ -2369,8 +2453,6 @@ local function validateFrostKey(inputKey)
     })
     return false
 end
-
-local DISCORD_INVITE_URL = "https://discord.gg/TWnmPCxxSY"
 
 pcall(function()
     if isfile and delfile then
@@ -2452,7 +2534,125 @@ local Window = WindUI:CreateWindow({
 })
 
 --------------------------------------------------------------------------------
--- TAB 1: AUTOMATION
+-- TAB 1: INFORMATION
+--------------------------------------------------------------------------------
+InfoTab = Window:Tab({
+    Title = "Information",
+    Icon = "info"
+})
+
+local InformationSection = InfoTab:Section({
+    Title = "Information",
+    Opened = true
+})
+
+local HubInfoParagraph = InformationSection:Paragraph({
+    Title = "❄️ Frost Hub Overview",
+    Desc = "Loading hub details..."
+})
+
+local KeyInfoParagraph = InformationSection:Paragraph({
+    Title = "🔑 License & Key Validity",
+    Desc = "Loading key details..."
+})
+
+updateInfoSection = function()
+    pcall(function()
+        local keyText = (ValidatedKeyData.Key and ValidatedKeyData.Key ~= "") and ValidatedKeyData.Key or "Active Key"
+        local durationStr = formatKeyRemaining()
+
+        HubInfoParagraph:SetDesc(string.format(
+            "• Current hub version: V 0.1\n• Our Discord server: %s\n• Script Status: Operational & Connected\n• UI Framework: WindUI Modern Edition",
+            DISCORD_INVITE_URL
+        ))
+
+        KeyInfoParagraph:SetDesc(string.format(
+            "• Current Key: %s\n• Key Duration: %s\n• Key Type: %s License\n• Verification: Live GitHub Sync",
+            keyText,
+            durationStr,
+            ValidatedKeyData.Duration or "Lifetime"
+        ))
+    end)
+end
+
+updateInfoSection()
+
+InformationSection:Button({
+    Title = "Refresh Key & Info",
+    Desc = "Recalculate remaining key time and refresh information display",
+    Callback = function()
+        updateInfoSection()
+        WindUI:Notify({
+            Title = "Information Refreshed",
+            Content = "Key validity: " .. formatKeyRemaining(),
+            Duration = 2.5,
+            Icon = "rotate-ccw"
+        })
+    end
+})
+
+local CommunitySection = InfoTab:Section({
+    Title = "Community & Support",
+    Opened = true
+})
+
+CommunitySection:Paragraph({
+    Title = "💬 Join Our Discord Server",
+    Desc = "Join the official Frost Hub community for free keys, updates, giveaways, and developer announcements!\n\n• Server Link: " .. DISCORD_INVITE_URL
+})
+
+CommunitySection:Button({
+    Title = "Copy Discord Server Invite",
+    Desc = "Copies " .. DISCORD_INVITE_URL .. " to your clipboard",
+    Callback = function()
+        pcall(function()
+            local setclip = setclipboard or toclipboard or (syn and syn.write_clipboard)
+            if setclip then
+                setclip(DISCORD_INVITE_URL)
+            end
+        end)
+        WindUI:Notify({
+            Title = "Discord Invite Copied",
+            Content = "Discord invite link copied to clipboard!\n" .. DISCORD_INVITE_URL .. "\nPaste it into your browser or Discord to join.",
+            Duration = 5,
+            Icon = "copy"
+        })
+    end
+})
+
+CommunitySection:Paragraph({
+    Title = "🎫 Support Tickets & Key Tutorial",
+    Desc = "• Need Help or Found a Bug? Open a support ticket in our Discord server.\n• Key Tutorial: Check out the step-by-step tutorial in the #get-script-key channel."
+})
+
+local SessionSection = InfoTab:Section({
+    Title = "Session & Player Overview",
+    Opened = true
+})
+
+SessionSection:Paragraph({
+    Title = "👤 Farmer Details",
+    Desc = string.format("• Player: %s (@%s)\n• User ID: %s\n• Account Age: %d days\n• Place ID: %s",
+        LocalPlayer.DisplayName or LocalPlayer.Name,
+        LocalPlayer.Name,
+        tostring(LocalPlayer.UserId),
+        LocalPlayer.AccountAge or 0,
+        tostring(game.PlaceId)
+    )
+})
+
+SessionSection:Paragraph({
+    Title = "⌨️ Controls & Shortcuts",
+    Desc = "• Toggle Menu: RightControl or RightShift\n• Center Window: Settings Tab -> Center Window\n• Scale HUD: Settings Tab -> HUD Scale\n• Unified Speed: Controls both Walk and Tween modes from 1 to 400 studs/s"
+})
+
+-- Automatically select Information Tab upon initial load
+pcall(function()
+    InfoTab:Select()
+end)
+
+--------------------------------------------------------------------------------
+-- TAB 2: AUTOMATION
 --------------------------------------------------------------------------------
 local MainTab = Window:Tab({
     Title = "Automation",
@@ -2603,7 +2803,7 @@ ActionsSection:Button({
 })
 
 --------------------------------------------------------------------------------
--- TAB 2: MOVEMENT
+-- TAB 3: MOVEMENT
 --------------------------------------------------------------------------------
 local MoveTab = Window:Tab({
     Title = "Movement",
@@ -2677,7 +2877,7 @@ MoveModifiersSection:Toggle({
 })
 
 --------------------------------------------------------------------------------
--- TAB 3: EGG PANEL & ESP
+-- TAB 4: EGG PANEL & ESP
 --------------------------------------------------------------------------------
 local EggPanelTab = Window:Tab({
     Title = "Egg Panel",
@@ -2732,7 +2932,7 @@ EggPanelSection:Input({
 })
 
 --------------------------------------------------------------------------------
--- TAB 4: UTILITIES
+-- TAB 5: UTILITIES
 --------------------------------------------------------------------------------
 local UtilitiesTab = Window:Tab({
     Title = "Utilities",
@@ -3084,7 +3284,7 @@ task.spawn(function()
 end)
 
 --------------------------------------------------------------------------------
--- TAB 5: WEBHOOK NOTIFICATIONS
+-- TAB 6: WEBHOOK NOTIFICATIONS
 --------------------------------------------------------------------------------
 local WebhookTab = Window:Tab({
     Title = "Webhook",
@@ -3203,7 +3403,7 @@ WebhookTriggersSection:Toggle({
 })
 
 --------------------------------------------------------------------------------
--- TAB 6: SETTINGS & HUD CUSTOMIZATION
+-- TAB 7: SETTINGS & HUD CUSTOMIZATION
 --------------------------------------------------------------------------------
 local SettingsTab = Window:Tab({
     Title = "Settings",
