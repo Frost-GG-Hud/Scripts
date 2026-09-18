@@ -73,17 +73,19 @@ end
 
 local function formatValueString(num)
     if not num or num <= 0 then return "0" end
+    local str
     if num >= 1e12 then
-        return string.format("%.1fT", num / 1e12)
+        str = string.format("%.1fT", num / 1e12)
     elseif num >= 1e9 then
-        return string.format("%.1fB", num / 1e9)
+        str = string.format("%.1fB", num / 1e9)
     elseif num >= 1e6 then
-        return string.format("%.1fM", num / 1e6)
+        str = string.format("%.1fM", num / 1e6)
     elseif num >= 1e3 then
-        return string.format("%.1fK", num / 1e3)
+        str = string.format("%.1fK", num / 1e3)
     else
         return tostring(math.floor(num))
     end
+    return string.gsub(str, "%.0([KMBT])", "%1")
 end
 
 --------------------------------------------------------------------------------
@@ -111,6 +113,10 @@ local Config = {
     MinLuckString = "1m",
     MinValue = 1000000,                  -- Backwards-compatible alias
     MinValueString = "1m",
+    -- Egg ESP Configuration
+    ESPEnabled = false,
+    ESPMinLuck = 0,
+    ESPMinLuckString = "0",
     -- Webhook Configuration
     WebhookEnabled = false,
     WebhookURL = "",
@@ -1608,6 +1614,298 @@ function EggPanel:StartAutoUpdate()
 end
 
 --------------------------------------------------------------------------------
+-- EGG ESP SUBSYSTEM (3D World Overlays & Filtering)
+--------------------------------------------------------------------------------
+local EggESP = {
+    Enabled = false,
+    MinLuck = 0,
+    ActiveMarkers = {}, -- [eggModel] = { Gui = BillboardGui, Part = BasePart, EggName = string, Luck = number, Rarity = string, DistLabel = TextLabel, LuckText = string }
+    Holder = nil,
+    UpdateTask = nil,
+    Listeners = {},
+    StatusParagraph = nil,
+}
+
+function EggESP:GetHolder()
+    if not self.Holder or not self.Holder.Parent then
+        local pgui = LocalPlayer:WaitForChild("PlayerGui")
+        local existing = pgui:FindFirstChild("FrostHub_ESP_Holder")
+        if existing then
+            self.Holder = existing
+        else
+            local holder = Instance.new("Folder")
+            holder.Name = "FrostHub_ESP_Holder"
+            holder.Parent = pgui
+            self.Holder = holder
+        end
+    end
+    return self.Holder
+end
+
+function EggESP:CreateMarker(eggModel)
+    if not eggModel or not eggModel:IsA("Model") then return end
+    if self.ActiveMarkers[eggModel] then return end
+
+    local part = eggModel.PrimaryPart or eggModel:FindFirstChild("Handle") or eggModel:FindFirstChildWhichIsA("BasePart")
+    if not part then return end
+
+    local eggName = eggModel.Name
+    local GameDataEggs = nil
+    pcall(function()
+        local gd = ReplicatedStorage:FindFirstChild("GameData")
+        if gd and gd:FindFirstChild("Eggs") then
+            GameDataEggs = require(gd.Eggs)
+        end
+    end)
+    local gData = GameDataEggs and GameDataEggs[eggName]
+    local luck = gData and gData.Luck or EggLuckCache[eggName] or 1
+    local rarity = gData and gData.Rarity or "Common"
+    local rarityColor = RARITY_COLORS[rarity] or Color3.fromRGB(0, 145, 255)
+    local luckText = formatValueString(luck) .. " Luck"
+
+    local holder = self:GetHolder()
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "ESP_" .. eggName
+    bb.Adornee = part
+    bb.Size = UDim2.new(0, 145, 0, 38)
+    bb.StudsOffset = Vector3.new(0, 2.8, 0)
+    bb.AlwaysOnTop = true
+    bb.MaxDistance = 5000
+    bb.Enabled = self.Enabled and (luck >= self.MinLuck)
+    bb.Parent = holder
+
+    local bg = Instance.new("Frame")
+    bg.Name = "Background"
+    bg.Size = UDim2.new(1, 0, 1, 0)
+    bg.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+    bg.BackgroundTransparency = 0.2
+    bg.BorderSizePixel = 0
+    bg.Parent = bb
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = bg
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Color = rarityColor
+    stroke.Parent = bg
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "NameLabel"
+    nameLabel.Text = eggName
+    nameLabel.Size = UDim2.new(1, -8, 0, 18)
+    nameLabel.Position = UDim2.new(0, 4, 0, 2)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = rarityColor
+    nameLabel.TextSize = 11
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Center
+    setUIFont(nameLabel, Enum.FontWeight.SemiBold)
+    nameLabel.Parent = bg
+
+    local hrp = getHRP()
+    local initialDist = hrp and (part.Position - hrp.Position).Magnitude or 0
+    local distLabel = Instance.new("TextLabel")
+    distLabel.Name = "DistLabel"
+    distLabel.RichText = true
+    distLabel.Text = string.format('<font color="rgb(56,189,248)">%s</font> <font color="rgb(161,161,170)">•</font> <font color="rgb(255,255,255)"><b>%d studs</b></font>', luckText, math.floor(initialDist))
+    distLabel.Size = UDim2.new(1, -8, 0, 16)
+    distLabel.Position = UDim2.new(0, 4, 0, 19)
+    distLabel.BackgroundTransparency = 1
+    distLabel.TextSize = 9.5
+    distLabel.TextXAlignment = Enum.TextXAlignment.Center
+    setUIFont(distLabel, Enum.FontWeight.Medium)
+    distLabel.Parent = bg
+
+    self.ActiveMarkers[eggModel] = {
+        Gui = bb,
+        Part = part,
+        EggName = eggName,
+        Luck = luck,
+        Rarity = rarity,
+        DistLabel = distLabel,
+        LuckText = luckText
+    }
+end
+
+function EggESP:RemoveMarker(eggModel)
+    local item = self.ActiveMarkers[eggModel]
+    if item then
+        if item.Gui then
+            pcall(function() item.Gui:Destroy() end)
+        end
+        self.ActiveMarkers[eggModel] = nil
+    end
+end
+
+function EggESP:UpdateFilter()
+    local visibleCount = 0
+    local totalMarkers = 0
+    for eggModel, item in pairs(self.ActiveMarkers) do
+        totalMarkers = totalMarkers + 1
+        local isVisible = self.Enabled and (item.Luck >= self.MinLuck)
+        if item.Gui then
+            item.Gui.Enabled = isVisible
+        end
+        if isVisible then
+            visibleCount = visibleCount + 1
+        end
+    end
+    self:UpdateStatusUI(visibleCount, totalMarkers)
+end
+
+function EggESP:UpdateStatusUI(visibleCount, totalCount)
+    if not self.StatusParagraph then return end
+    pcall(function()
+        local total = totalCount or 0
+        local vis = visibleCount
+        if not vis then
+            vis = 0
+            for _, item in pairs(self.ActiveMarkers) do
+                if self.Enabled and (item.Luck >= self.MinLuck) then
+                    vis = vis + 1
+                end
+                total = total + 1
+            end
+        end
+
+        local filterText = self.MinLuck > 0 and (formatValueString(self.MinLuck) .. " Luck") or "All Eggs"
+        self.StatusParagraph:SetDesc(string.format(
+            "ESP Status: %s\nActive Filter: >= %s\nVisible Markers: %d / %d on map",
+            self.Enabled and "Active" or "Disabled",
+            filterText,
+            vis,
+            total
+        ))
+    end)
+end
+
+function EggESP:ScanAll()
+    local eggsFolder = workspace:FindFirstChild("RenderedEggs")
+    if eggsFolder then
+        for _, eggModel in ipairs(eggsFolder:GetChildren()) do
+            if eggModel:IsA("Model") then
+                self:CreateMarker(eggModel)
+            end
+        end
+    end
+    self:UpdateFilter()
+end
+
+function EggESP:StartDistanceUpdater()
+    if self.UpdateTask then return end
+    self.UpdateTask = task.spawn(function()
+        while self.Enabled do
+            local hrp = getHRP()
+            local playerPos = hrp and hrp.Position or Vector3.zero
+            for eggModel, item in pairs(self.ActiveMarkers) do
+                if not eggModel.Parent or not item.Part or not item.Part.Parent then
+                    self:RemoveMarker(eggModel)
+                elseif item.Gui and item.Gui.Enabled and item.DistLabel then
+                    pcall(function()
+                        local dist = (item.Part.Position - playerPos).Magnitude
+                        item.DistLabel.Text = string.format(
+                            '<font color="rgb(56,189,248)">%s</font> <font color="rgb(161,161,170)">•</font> <font color="rgb(255,255,255)"><b>%d studs</b></font>',
+                            item.LuckText,
+                            math.floor(dist)
+                        )
+                    end)
+                end
+            end
+            task.wait(0.25)
+        end
+        self.UpdateTask = nil
+    end)
+end
+
+function EggESP:SetEnabled(state)
+    self.Enabled = state
+    Config.ESPEnabled = state
+    if state then
+        self:ScanAll()
+        self:StartDistanceUpdater()
+    else
+        if self.UpdateTask then
+            pcall(task.cancel, self.UpdateTask)
+            self.UpdateTask = nil
+        end
+        for _, item in pairs(self.ActiveMarkers) do
+            if item.Gui then item.Gui.Enabled = false end
+        end
+    end
+    self:UpdateFilter()
+end
+
+function EggESP:SetMinLuck(val, valStr)
+    self.MinLuck = val
+    Config.ESPMinLuck = val
+    Config.ESPMinLuckString = valStr or formatValueString(val)
+    self:UpdateFilter()
+end
+
+function EggESP:Init()
+    local function hookFolder(folder)
+        table.insert(self.Listeners, folder.ChildAdded:Connect(function(child)
+            if child:IsA("Model") then
+                task.defer(function()
+                    self:CreateMarker(child)
+                    self:UpdateFilter()
+                end)
+            end
+        end))
+        table.insert(self.Listeners, folder.ChildRemoved:Connect(function(child)
+            if self.ActiveMarkers[child] then
+                self:RemoveMarker(child)
+                self:UpdateFilter()
+            end
+        end))
+    end
+
+    local eggsFolder = workspace:FindFirstChild("RenderedEggs")
+    if eggsFolder then
+        hookFolder(eggsFolder)
+    else
+        table.insert(self.Listeners, workspace.ChildAdded:Connect(function(child)
+            if child.Name == "RenderedEggs" then
+                hookFolder(child)
+                if self.Enabled then
+                    self:ScanAll()
+                end
+            end
+        end))
+    end
+    if self.Enabled then
+        self:ScanAll()
+        self:StartDistanceUpdater()
+    end
+end
+
+function EggESP:Destroy()
+    self.Enabled = false
+    if self.UpdateTask then
+        pcall(task.cancel, self.UpdateTask)
+        self.UpdateTask = nil
+    end
+    for _, conn in ipairs(self.Listeners) do
+        pcall(function() conn:Disconnect() end)
+    end
+    self.Listeners = {}
+    for _, item in pairs(self.ActiveMarkers) do
+        if item.Gui then pcall(function() item.Gui:Destroy() end) end
+    end
+    self.ActiveMarkers = {}
+    if self.Holder then
+        pcall(function() self.Holder:Destroy() end)
+        self.Holder = nil
+    end
+    local pgui = LocalPlayer:FindFirstChild("PlayerGui")
+    if pgui then
+        local old = pgui:FindFirstChild("FrostHub_ESP_Holder")
+        if old then pcall(function() old:Destroy() end) end
+    end
+end
+
+--------------------------------------------------------------------------------
 -- WINDUI MODERN HUD CREATION
 --------------------------------------------------------------------------------
 pcall(function()
@@ -1828,56 +2126,7 @@ ActionsSection:Button({
 })
 
 --------------------------------------------------------------------------------
--- TAB 2: EGG PANEL
---------------------------------------------------------------------------------
-local EggPanelTab = Window:Tab({
-    Title = "Egg Panel",
-    Icon = "layout-grid"
-})
-
-local EggPanelSection = EggPanelTab:Section({
-    Title = "Egg Panel",
-    Opened = true
-})
-
-EggPanelSection:Button({
-    Title = "Open Panel",
-    Desc = "Open the live Egg Panel showing all available eggs, luck values, and reset countdown",
-    Callback = function()
-        EggPanel:Open()
-    end
-})
-
-local EggPanelLiveStatus = EggPanelSection:Paragraph({
-    Title = "Live Egg Radar & Reset",
-    Desc = "Loading active egg counts and reset timer..."
-})
-
-EggPanel.UpdateCallback = function(eggList, resetTime)
-    pcall(function()
-        local totalAvailable = 0
-        local topEgg = "None"
-        local topLuck = 0
-        for _, egg in ipairs(eggList) do
-            totalAvailable = totalAvailable + egg.Count
-            if egg.Luck > topLuck then
-                topLuck = egg.Luck
-                topEgg = egg.Name .. " (" .. formatValueString(egg.Luck) .. " Luck)"
-            end
-        end
-
-        EggPanelLiveStatus:SetDesc(string.format(
-            "Next Reset: %s\nTotal Eggs on Map: %d\nUnique Egg Types: %d\nHighest Tier Egg: %s",
-            resetTime,
-            totalAvailable,
-            #eggList,
-            topEgg
-        ))
-    end)
-end
-
---------------------------------------------------------------------------------
--- TAB 3: MOVEMENT
+-- TAB 2: MOVEMENT
 --------------------------------------------------------------------------------
 local MoveTab = Window:Tab({
     Title = "Movement",
@@ -1951,7 +2200,124 @@ MoveModifiersSection:Toggle({
 })
 
 --------------------------------------------------------------------------------
--- TAB 3: WEBHOOK NOTIFICATIONS
+-- TAB 3: EGG PANEL & ESP
+--------------------------------------------------------------------------------
+local EggPanelTab = Window:Tab({
+    Title = "Egg Panel",
+    Icon = "layout-grid"
+})
+
+local EggPanelSection = EggPanelTab:Section({
+    Title = "Egg Panel & Live ESP",
+    Opened = true
+})
+
+EggPanelSection:Button({
+    Title = "Open Panel",
+    Desc = "Open the live Egg Panel showing all available eggs, luck values, and reset countdown",
+    Callback = function()
+        EggPanel:Open()
+    end
+})
+
+EggPanelSection:Toggle({
+    Title = "Egg ESP",
+    Desc = "Display real-time 3D markers on eggs with egg type, luck value, and distance",
+    Value = Config.ESPEnabled,
+    Callback = function(state)
+        EggESP:SetEnabled(state)
+        WindUI:Notify({
+            Title = "Egg ESP " .. (state and "Enabled" or "Disabled"),
+            Content = state and string.format("Displaying eggs with >= %s Luck", Config.ESPMinLuck > 0 and formatValueString(Config.ESPMinLuck) or "0") or "Egg ESP markers hidden",
+            Duration = 2.5,
+            Icon = state and "eye" or "eye-off"
+        })
+    end
+})
+
+EggPanelSection:Input({
+    Title = "ESP Manager",
+    Desc = "Set minimum luck filter (e.g. 100, 20k, 1m, 300b). Hides all eggs below this threshold",
+    Value = Config.ESPMinLuckString,
+    Placeholder = "e.g. 20k, 100k, 1m, 300b",
+    Callback = function(text)
+        local parsed = parseValueString(text)
+        Config.ESPMinLuck = parsed
+        Config.ESPMinLuckString = text
+        EggESP:SetMinLuck(parsed, text)
+        WindUI:Notify({
+            Title = "ESP Manager Updated",
+            Content = parsed > 0 and string.format("Showing eggs with >= %s Luck (hiding below)", formatValueString(parsed)) or "Showing all eggs on ESP",
+            Duration = 2.5,
+            Icon = "filter"
+        })
+    end
+})
+
+local espPresets = {
+    { label = "All Eggs (0+)", value = 0, str = "0" },
+    { label = "20K+ Luck", value = 20000, str = "20k" },
+    { label = "100K+ Luck", value = 100000, str = "100k" },
+    { label = "1M+ Luck", value = 1000000, str = "1m" },
+    { label = "50M+ Luck", value = 50000000, str = "50m" },
+    { label = "1B+ Luck", value = 1000000000, str = "1b" },
+}
+local currentPresetIndex = 1
+
+EggPanelSection:Button({
+    Title = "ESP Manager Presets",
+    Desc = "Quick-cycle through luck filter thresholds (All, 20K+, 100K+, 1M+, 50M+, 1B+)",
+    Callback = function()
+        currentPresetIndex = (currentPresetIndex % #espPresets) + 1
+        local preset = espPresets[currentPresetIndex]
+        Config.ESPMinLuck = preset.value
+        Config.ESPMinLuckString = preset.str
+        EggESP:SetMinLuck(preset.value, preset.str)
+        WindUI:Notify({
+            Title = "ESP Preset Applied",
+            Content = string.format("Filter set to: %s", preset.label),
+            Duration = 2,
+            Icon = "sparkles"
+        })
+    end
+})
+
+local ESPStatusParagraph = EggPanelSection:Paragraph({
+    Title = "Egg ESP Status",
+    Desc = "ESP Status: Disabled\nActive Filter: All Eggs\nVisible Markers: 0"
+})
+EggESP.StatusParagraph = ESPStatusParagraph
+
+local EggPanelLiveStatus = EggPanelSection:Paragraph({
+    Title = "Live Egg Radar & Reset",
+    Desc = "Loading active egg counts and reset timer..."
+})
+
+EggPanel.UpdateCallback = function(eggList, resetTime)
+    pcall(function()
+        local totalAvailable = 0
+        local topEgg = "None"
+        local topLuck = 0
+        for _, egg in ipairs(eggList) do
+            totalAvailable = totalAvailable + egg.Count
+            if egg.Luck > topLuck then
+                topLuck = egg.Luck
+                topEgg = egg.Name .. " (" .. formatValueString(egg.Luck) .. " Luck)"
+            end
+        end
+
+        EggPanelLiveStatus:SetDesc(string.format(
+            "Next Reset: %s\nTotal Eggs on Map: %d\nUnique Egg Types: %d\nHighest Tier Egg: %s",
+            resetTime,
+            totalAvailable,
+            #eggList,
+            topEgg
+        ))
+    end)
+end
+
+--------------------------------------------------------------------------------
+-- TAB 4: WEBHOOK NOTIFICATIONS
 --------------------------------------------------------------------------------
 local WebhookTab = Window:Tab({
     Title = "Webhook",
@@ -2120,21 +2486,26 @@ UserInputService.InputBegan:Connect(function(input, processed)
     end
 end)
 
--- Initialize & start background auto-update for Egg Panel
+-- Initialize & start background auto-update for Egg Panel and Egg ESP
 pcall(function()
     EggPanel:Init()
     EggPanel:StartAutoUpdate()
+    EggESP:Init()
 end)
 
 -- Register cleanup for future reloads
 if getgenv then
     getgenv().FrostHubEggPanel = EggPanel
+    getgenv().FrostHubEggESP = EggESP
     getgenv().FrostHubCleanup = function()
         pcall(function()
-            if EggPanel.Gui then EggPanel.Gui:Destroy() end
+            if EggESP then EggESP:Destroy() end
+            if EggPanel and EggPanel.Gui then EggPanel.Gui:Destroy() end
             if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
                 local old = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_EggPanelGui")
                 if old then old:Destroy() end
+                local oldEsp = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_ESP_Holder")
+                if oldEsp then oldEsp:Destroy() end
             end
             local Lighting = game:GetService("Lighting")
             local blur = Lighting:FindFirstChildOfClass("BlurEffect") or Lighting:FindFirstChild("Blur")
