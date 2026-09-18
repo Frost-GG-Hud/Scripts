@@ -92,10 +92,9 @@ end
 -- CONFIGURATION
 --------------------------------------------------------------------------------
 local Config = {
-    MovementMode = "Walk (Pathfinding)", -- "Walk (Pathfinding)", "Walk (Direct)", "Tween (Smooth)"
-    Speed = 60,                          -- Unified speed for Walk and Tween (1 to 400)
+    MovementMode = "Tween",              -- Standard and only movement mode for Auto Collect Eggs
+    Speed = 60,                          -- Movement speed for Tween (0 to 375)
     NoclipOnTween = true,
-    AutoJump = true,
     AgentRadius = 2.0,
     AgentHeight = 5.0,
     AgentCanJump = true,
@@ -683,161 +682,70 @@ local function getCarriedCount()
 end
 
 --------------------------------------------------------------------------------
--- UNIFIED MOVEMENT SYSTEM (Walk & Tween)
+-- STANDARD TWEEN MOVEMENT SYSTEM
 --------------------------------------------------------------------------------
 local function moveToPoint(targetPos)
     local hrp = getHRP()
     local hum = getHumanoid()
     if not hrp or not hum then return false end
 
-    local mode = Config.MovementMode
-    local currentSpeed = math.clamp(tonumber(Config.Speed) or 60, 1, 400)
-
-    ----------------------------------------------------------------------------
-    -- MODE 1: TWEEN (Smooth CFrame Glide at Config.Speed)
-    ----------------------------------------------------------------------------
-    if mode == "Tween (Smooth)" then
-        local adjustedTarget = targetPos + Vector3.new(0, 2.5, 0)
-        local distance = (hrp.Position - adjustedTarget).Magnitude
-        if distance <= Config.MaxInteractDistance then return true end
-
-        local duration = math.clamp(distance / currentSpeed, 0.05, 45)
-
-        -- Noclip during tween if enabled
-        local noclipConn = nil
-        if Config.NoclipOnTween then
-            noclipConn = RunService.Stepped:Connect(function()
-                local char = LocalPlayer.Character
-                if char then
-                    for _, part in ipairs(char:GetDescendants()) do
-                        if part:IsA("BasePart") and part.CanCollide then
-                            part.CanCollide = false
-                        end
-                    end
-                end
-            end)
+    local currentSpeed = math.clamp(tonumber(Config.Speed) or 60, 0, 375)
+    if currentSpeed <= 0 then
+        while State.Enabled and (tonumber(Config.Speed) or 0) <= 0 do
+            task.wait(0.1)
         end
-
-        local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
-            CFrame = CFrame.new(adjustedTarget)
-        })
-        State.ActiveTween = tween
-        tween:Play()
-
-        local completed = false
-        local conn = tween.Completed:Connect(function()
-            completed = true
-        end)
-
-        while State.Enabled and not completed do
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            task.wait(0.04)
-        end
-
-        if conn then conn:Disconnect() end
-        if noclipConn then noclipConn:Disconnect() end
-        if State.ActiveTween then
-            State.ActiveTween:Cancel()
-            State.ActiveTween = nil
-        end
-        return (hrp.Position - targetPos).Magnitude <= (Config.MaxInteractDistance + 3)
-
-    ----------------------------------------------------------------------------
-    -- MODE 2: WALK DIRECT (Direct MoveTo at Config.Speed)
-    ----------------------------------------------------------------------------
-    elseif mode == "Walk (Direct)" then
-        hum.WalkSpeed = currentSpeed
-        hum:MoveTo(targetPos)
-
-        local start = os.clock()
-        local lastPos = hrp.Position
-        local lastCheck = os.clock()
-
-        while State.Enabled do
-            local dist = (hrp.Position - targetPos).Magnitude
-            if dist <= Config.MaxInteractDistance then break end
-
-            if os.clock() - lastCheck >= 0.5 then
-                if (hrp.Position - lastPos).Magnitude < 0.6 and Config.AutoJump then
-                    hum.Jump = true
-                end
-                lastPos = hrp.Position
-                lastCheck = os.clock()
-            end
-
-            if os.clock() - start > 15 then break end
-            task.wait(0.05)
-        end
-        return (hrp.Position - targetPos).Magnitude <= (Config.MaxInteractDistance + 3)
-
-    ----------------------------------------------------------------------------
-    -- MODE 3: WALK PATHFINDING (Intelligent Pathing at Config.Speed)
-    ----------------------------------------------------------------------------
-    else
-        hum.WalkSpeed = currentSpeed
-
-        local path = PathfindingService:CreatePath({
-            AgentRadius = Config.AgentRadius,
-            AgentHeight = Config.AgentHeight,
-            AgentCanJump = Config.AgentCanJump,
-            AgentCanClimb = Config.AgentCanClimb,
-            WaypointSpacing = Config.WaypointSpacing
-        })
-
-        local success = pcall(function()
-            path:ComputeAsync(hrp.Position, targetPos)
-        end)
-
-        if not success or path.Status ~= Enum.PathStatus.Success then
-            hum:MoveTo(targetPos)
-            local fallbackStart = os.clock()
-            while State.Enabled and (hrp.Position - targetPos).Magnitude > Config.MaxInteractDistance do
-                if os.clock() - fallbackStart > 4 then break end
-                task.wait(0.1)
-            end
-            return (hrp.Position - targetPos).Magnitude <= (Config.MaxInteractDistance + 3)
-        end
-
-        local waypoints = path:GetWaypoints()
-        for _, waypoint in ipairs(waypoints) do
-            if not State.Enabled then return false end
-
-            if waypoint.Action == Enum.PathWaypointAction.Jump and Config.AutoJump then
-                hum.Jump = true
-            end
-
-            hum:MoveTo(waypoint.Position)
-
-            local moveStart = os.clock()
-            local lastPos = hrp.Position
-            local lastStuckCheck = os.clock()
-
-            while State.Enabled do
-                local dist = (hrp.Position - waypoint.Position).Magnitude
-                if dist <= 3.5 or (hrp.Position - targetPos).Magnitude <= Config.MaxInteractDistance then
-                    break
-                end
-
-                if os.clock() - lastStuckCheck >= 0.5 then
-                    local moved = (hrp.Position - lastPos).Magnitude
-                    if moved < 0.6 and Config.AutoJump then
-                        hum.Jump = true
-                        hum:MoveTo(waypoint.Position + Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)))
-                    end
-                    lastPos = hrp.Position
-                    lastStuckCheck = os.clock()
-                end
-
-                if os.clock() - moveStart > Config.StuckThresholdSeconds then
-                    break
-                end
-
-                task.wait(0.05)
-            end
-        end
-
-        return (hrp.Position - targetPos).Magnitude <= (Config.MaxInteractDistance + 3)
+        if not State.Enabled then return false end
+        currentSpeed = math.clamp(tonumber(Config.Speed) or 60, 0, 375)
     end
+
+    local adjustedTarget = targetPos + Vector3.new(0, 2.5, 0)
+    local distance = (hrp.Position - adjustedTarget).Magnitude
+    if distance <= Config.MaxInteractDistance then return true end
+
+    local duration = math.clamp(distance / currentSpeed, 0.05, 45)
+
+    -- Track current destination for instant speed adjustments
+    State.CurrentTargetPos = targetPos
+
+    -- Noclip during tween if enabled
+    local noclipConn = nil
+    if Config.NoclipOnTween then
+        noclipConn = RunService.Stepped:Connect(function()
+            local char = LocalPlayer.Character
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+    end
+
+    local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+        CFrame = CFrame.new(adjustedTarget)
+    })
+    State.ActiveTween = tween
+    tween:Play()
+
+    local completed = false
+    local conn = tween.Completed:Connect(function()
+        completed = true
+    end)
+
+    while State.Enabled and not completed do
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        task.wait(0.04)
+    end
+
+    if conn then conn:Disconnect() end
+    if noclipConn then noclipConn:Disconnect() end
+    if State.ActiveTween then
+        State.ActiveTween:Cancel()
+        State.ActiveTween = nil
+    end
+    State.CurrentTargetPos = nil
+    return (hrp.Position - targetPos).Magnitude <= (Config.MaxInteractDistance + 3)
 end
 
 --------------------------------------------------------------------------------
@@ -2317,11 +2225,11 @@ local ValidatedKeyData = {
 
 local function formatKeyRemaining()
     if not ValidatedKeyData.ExpiresAt or ValidatedKeyData.ExpiresAt <= 0 then
-        return "Lifetime (Permanent - Never Expires)"
+        return "Lifetime"
     end
     local remaining = ValidatedKeyData.ExpiresAt - os.time()
     if remaining <= 0 then
-        return "Expired (Re-enter new key)"
+        return "Expired"
     end
     local days = math.floor(remaining / 86400)
     local hours = math.floor((remaining % 86400) / 3600)
@@ -2338,10 +2246,8 @@ local function formatKeyRemaining()
     if minutes > 0 then
         table.insert(parts, string.format("%d minute%s", minutes, minutes == 1 and "" or "s"))
     end
-    if #parts == 0 then
-        table.insert(parts, string.format("%d second%s", seconds, seconds == 1 and "" or "s"))
-    end
-    return table.concat(parts, ", ") .. " remaining"
+    table.insert(parts, string.format("%d second%s", seconds, seconds == 1 and "" or "s"))
+    return table.concat(parts, ", ")
 end
 
 local InfoTab = nil
@@ -2542,17 +2448,12 @@ InfoTab = Window:Tab({
 })
 
 local InformationSection = InfoTab:Section({
-    Title = "Information",
+    Title = "❄️ Information",
     Opened = true
 })
 
-local HubInfoParagraph = InformationSection:Paragraph({
-    Title = "❄️ Frost Hub Overview",
-    Desc = "Loading hub details..."
-})
-
 local KeyInfoParagraph = InformationSection:Paragraph({
-    Title = "🔑 License & Key Validity",
+    Title = "🔑 Key",
     Desc = "Loading key details..."
 })
 
@@ -2561,30 +2462,35 @@ updateInfoSection = function()
         local keyText = (ValidatedKeyData.Key and ValidatedKeyData.Key ~= "") and ValidatedKeyData.Key or "Active Key"
         local durationStr = formatKeyRemaining()
 
-        HubInfoParagraph:SetDesc(string.format(
-            "• Current hub version: V 0.1\n• Our Discord server: %s\n• Script Status: Operational & Connected\n• UI Framework: WindUI Modern Edition",
-            DISCORD_INVITE_URL
-        ))
-
-        KeyInfoParagraph:SetDesc(string.format(
-            "• Current Key: %s\n• Key Duration: %s\n• Key Type: %s License\n• Verification: Live GitHub Sync",
-            keyText,
-            durationStr,
-            ValidatedKeyData.Duration or "Lifetime"
-        ))
+        if KeyInfoParagraph then
+            KeyInfoParagraph:SetDesc(string.format(
+                "• Key: %s\n• Remaining Duration: %s",
+                keyText,
+                durationStr
+            ))
+        end
     end)
 end
 
 updateInfoSection()
 
+-- Automatic real-time key remaining duration updater (every 1s)
+task.spawn(function()
+    while task.wait(1) do
+        if KeyInfoParagraph then
+            updateInfoSection()
+        end
+    end
+end)
+
 InformationSection:Button({
-    Title = "Refresh Key & Info",
-    Desc = "Recalculate remaining key time and refresh information display",
+    Title = "🔄 Refresh Key",
+    Desc = "Recalculate remaining key time and refresh display",
     Callback = function()
         updateInfoSection()
         WindUI:Notify({
-            Title = "Information Refreshed",
-            Content = "Key validity: " .. formatKeyRemaining(),
+            Title = "Key Refreshed",
+            Content = "Remaining: " .. formatKeyRemaining(),
             Duration = 2.5,
             Icon = "rotate-ccw"
         })
@@ -2592,7 +2498,7 @@ InformationSection:Button({
 })
 
 local CommunitySection = InfoTab:Section({
-    Title = "Community & Support",
+    Title = "💬 Community & Support",
     Opened = true
 })
 
@@ -2602,7 +2508,7 @@ CommunitySection:Paragraph({
 })
 
 CommunitySection:Button({
-    Title = "Copy Discord Server Invite",
+    Title = "📋 Copy Discord Server Invite",
     Desc = "Copies " .. DISCORD_INVITE_URL .. " to your clipboard",
     Callback = function()
         pcall(function()
@@ -2626,7 +2532,7 @@ CommunitySection:Paragraph({
 })
 
 local SessionSection = InfoTab:Section({
-    Title = "Session & Player Overview",
+    Title = "📊 Session & Player Overview",
     Opened = true
 })
 
@@ -2643,7 +2549,7 @@ SessionSection:Paragraph({
 
 SessionSection:Paragraph({
     Title = "⌨️ Controls & Shortcuts",
-    Desc = "• Toggle Menu: RightControl or RightShift\n• Center Window: Settings Tab -> Center Window\n• Scale HUD: Settings Tab -> HUD Scale\n• Unified Speed: Controls both Walk and Tween modes from 1 to 400 studs/s"
+    Desc = "• Toggle Menu: RightControl or RightShift\n• Center Window: Settings Tab -> Center Window\n• Scale HUD: Settings Tab -> HUD Scale\n• Movement Speed: Adjust Tween speed instantly from 0 to 375 studs/s"
 })
 
 -- Automatically select Information Tab upon initial load
@@ -2815,30 +2721,13 @@ local MoveSection = MoveTab:Section({
     Opened = true
 })
 
-MoveSection:Dropdown({
-    Title = "Movement Mode",
-    Desc = "Select navigation mode (Walk Pathfinding, Walk Direct, or Tween Glide)",
-    Values = { "Walk (Pathfinding)", "Walk (Direct)", "Tween (Smooth)" },
-    Value = "Walk (Pathfinding)",
-    Callback = function(selected)
-        Config.MovementMode = selected
-        updateStatusUI()
-        WindUI:Notify({
-            Title = "Movement System Updated",
-            Content = "Switched to " .. selected,
-            Duration = 2,
-            Icon = "settings-2"
-        })
-    end
-})
-
--- UNIFIED SPEED CHANGER (Applies to both Walk and Tween)
+-- MOVEMENT SPEED CHANGER (0 to 375 studs/s, applied instantly)
 local UnifiedSpeedSlider = MoveSection:Slider({
     Title = "Movement Speed",
-    Desc = "Unified speed applied automatically to Tween and Walk modes (1 to 400)",
+    Desc = "Adjust movement speed from 0 to 375 studs/s (applied instantly)",
     Value = {
-        Min = 1,
-        Max = 400,
+        Min = 0,
+        Max = 375,
         Default = 60
     },
     Step = 1,
@@ -2846,8 +2735,24 @@ local UnifiedSpeedSlider = MoveSection:Slider({
         Config.Speed = val
         updateStatusUI()
         pcall(function()
-            if State.Enabled and Config.MovementMode ~= "Tween (Smooth)" then
-                getHumanoid().WalkSpeed = val
+            local hrp = getHRP()
+            if State.Enabled and State.ActiveTween and State.CurrentTargetPos and hrp then
+                State.ActiveTween:Cancel()
+                State.ActiveTween = nil
+                if val > 0 then
+                    local adjustedTarget = State.CurrentTargetPos + Vector3.new(0, 2.5, 0)
+                    local distance = (hrp.Position - adjustedTarget).Magnitude
+                    local newDuration = math.clamp(distance / val, 0.05, 45)
+                    local newTween = TweenService:Create(hrp, TweenInfo.new(newDuration, Enum.EasingStyle.Linear), {
+                        CFrame = CFrame.new(adjustedTarget)
+                    })
+                    State.ActiveTween = newTween
+                    newTween:Play()
+                end
+            end
+            local hum = getHumanoid()
+            if hum then
+                hum.WalkSpeed = math.max(val, 16)
             end
         end)
     end
@@ -2864,15 +2769,6 @@ MoveModifiersSection:Toggle({
     Value = true,
     Callback = function(state)
         Config.NoclipOnTween = state
-    end
-})
-
-MoveModifiersSection:Toggle({
-    Title = "Auto Jump Obstacles",
-    Desc = "Automatically jumps when approaching hurdles or when stuck during walk",
-    Value = true,
-    Callback = function(state)
-        Config.AutoJump = state
     end
 })
 
