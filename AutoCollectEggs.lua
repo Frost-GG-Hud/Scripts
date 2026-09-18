@@ -31,6 +31,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 
+if getgenv and getgenv().FrostHubCleanup then
+    pcall(getgenv().FrostHubCleanup)
+end
+
+local ScriptRunId = HttpService:GenerateGUID(false)
+if getgenv then
+    getgenv().FrostHubRunId = ScriptRunId
+end
+
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
     Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
@@ -745,15 +754,41 @@ local RARITY_COLORS = {
 }
 
 local function getEggResetTimeText()
+    -- 1. Read directly from game's EggCycle service (exact native egg countdown, zero GUI tampering, zero blur)
+    local secRemaining = nil
+    pcall(function()
+        local gs = ReplicatedStorage:FindFirstChild("GameServices")
+        if gs and gs:FindFirstChild("EggCycle") then
+            local ec = require(gs.EggCycle)
+            if ec and ec.SecondsRemaining then
+                secRemaining = ec.SecondsRemaining()
+            end
+        end
+    end)
+    if secRemaining and type(secRemaining) == "number" then
+        local sec = math.max(0, math.floor(secRemaining))
+        return string.format("%dm %02ds", math.floor(sec / 60), sec % 60)
+    end
+
+    -- 2. Fallback: query DayNight service if available
+    local dn = nil
+    pcall(function()
+        local gs = ReplicatedStorage:FindFirstChild("GameServices")
+        if gs and gs:FindFirstChild("DayNight") then
+            dn = require(gs.DayNight)
+        end
+    end)
+    if dn and dn.SecondsUntilNextPhase then
+        local sec = math.max(0, math.floor(dn.SecondsUntilNextPhase()))
+        return string.format("%dm %02ds", math.floor(sec / 60), sec % 60)
+    end
+
+    -- 3. Passive read of EggTracker Timer without ever modifying Visible or Position
     local text = ""
     pcall(function()
         local et = LocalPlayer.PlayerGui:FindFirstChild("Main")
             and LocalPlayer.PlayerGui.Main:FindFirstChild("EggTracker")
         if et and et:FindFirstChild("Timer") then
-            if not et.Visible then
-                et.Position = UDim2.new(999, 0, 999, 0)
-                et.Visible = true
-            end
             text = et.Timer.Text
         end
     end)
@@ -767,15 +802,7 @@ local function getEggResetTimeText()
         return text
     end
 
-    local dn = nil
-    pcall(function()
-        dn = require(ReplicatedStorage.GameServices.DayNight)
-    end)
-    if dn and dn.SecondsUntilNextPhase then
-        local sec = math.max(0, math.floor(dn.SecondsUntilNextPhase()))
-        return string.format("%dm %02ds", math.floor(sec / 60), sec % 60)
-    end
-    return "Unknown"
+    return "0m 00s"
 end
 
 local function getActiveEggData()
@@ -1099,7 +1126,7 @@ function EggPanel:Init()
     local resetLabel = Instance.new("TextLabel")
     resetLabel.Name = "ResetTimerLabel"
     resetLabel.RichText = true
-    resetLabel.Text = '<font color="rgb(161,161,170)">Next Reset: </font><font color="rgb(255,255,255)"><b>0m 00s</b></font>'
+    resetLabel.Text = '<font color="rgb(161,161,170)">Next Reset: </font><font color="rgb(255,255,255)"><b>Loading...</b></font>'
     resetLabel.Size = UDim2.new(1, -115, 1, 0)
     resetLabel.Position = UDim2.new(0, 115, 0, 0)
     resetLabel.BackgroundTransparency = 1
@@ -1290,6 +1317,10 @@ function EggPanel:Init()
     cardLayout.Padding = UDim.new(0, 6)
     cardLayout.SortOrder = Enum.SortOrder.LayoutOrder
     cardLayout.Parent = cardScroll
+
+    pcall(function()
+        self:Refresh()
+    end)
 end
 
 function EggPanel:RenderCards()
@@ -1511,8 +1542,10 @@ function EggPanel:Toggle()
 end
 
 function EggPanel:StartAutoUpdate()
+    local thisRunId = ScriptRunId
     task.spawn(function()
         while true do
+            if getgenv and getgenv().FrostHubRunId ~= thisRunId then break end
             pcall(function()
                 self:Refresh()
             end)
@@ -1532,6 +1565,20 @@ pcall(function()
     end
     for _, c in ipairs(CoreGui:GetChildren()) do
         if string.find(c.Name, "Frost") or string.find(c.Name, "WindUI") then c:Destroy() end
+    end
+
+    -- Clean up any residual Lighting blur and restore game's EggTracker state
+    local Lighting = game:GetService("Lighting")
+    local blur = Lighting:FindFirstChild("Blur")
+    if blur and blur:IsA("BlurEffect") then
+        blur.Enabled = false
+    end
+    local et = LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main:FindFirstChild("EggTracker")
+    if et then
+        et.Visible = false
+        if et.Position.X.Scale == 999 then
+            et.Position = UDim2.new(0.5, -150, 0.5, -200)
+        end
     end
 end)
 
@@ -2016,7 +2063,24 @@ UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 -- Initialize & start background auto-update for Egg Panel
-EggPanel:Init()
-EggPanel:StartAutoUpdate()
+pcall(function()
+    EggPanel:Init()
+    EggPanel:StartAutoUpdate()
+end)
+
+-- Register cleanup for future reloads
+if getgenv then
+    getgenv().FrostHubEggPanel = EggPanel
+    getgenv().FrostHubCleanup = function()
+        pcall(function()
+            if EggPanel.Gui then EggPanel.Gui:Destroy() end
+            local Lighting = game:GetService("Lighting")
+            local blur = Lighting:FindFirstChildOfClass("BlurEffect") or Lighting:FindFirstChild("Blur")
+            if blur and blur:IsA("BlurEffect") then blur.Enabled = false end
+            local et = LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main:FindFirstChild("EggTracker")
+            if et then et.Visible = false end
+        end)
+    end
+end
 
 print("❄️ [Frost Hub] WindUI Egg Panel & Radar Suite initialized.")
