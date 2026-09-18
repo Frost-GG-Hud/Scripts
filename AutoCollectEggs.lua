@@ -123,6 +123,7 @@ local Config = {
     IncludeFarmerStats = true,           -- Automatically included by default
     EggNotifications = true,             -- Send egg stats when egg is collected and deposited
     WeatherNotifications = true,         -- Send weather event & change notifications
+    HUDScale = 100,                      -- Default HUD Scale (80% to 150%)
 }
 
 local UtilitiesConfig = {
@@ -2797,6 +2798,8 @@ pcall(function()
     InfoTab:Select()
 end)
 
+local UIControls = {}
+
 --------------------------------------------------------------------------------
 -- TAB 2: AUTOMATION
 --------------------------------------------------------------------------------
@@ -2810,7 +2813,8 @@ local MainSection = MainTab:Section({
     Opened = true
 })
 
-local ToggleAuto = MainSection:Toggle({
+local ToggleAuto
+ToggleAuto = MainSection:Toggle({
     Title = "Auto Collect Eggs",
     Desc = "Automates scanning, approaching, collecting, and plot depositing",
     Value = false,
@@ -2848,6 +2852,7 @@ local ToggleAuto = MainSection:Toggle({
         end
     end
 })
+UIControls.ToggleAuto = ToggleAuto
 
 -- VALUE FILTERING SECTION
 -- EGG LUCK FILTERING SECTION
@@ -2856,7 +2861,7 @@ local FilterSection = MainTab:Section({
     Opened = true
 })
 
-FilterSection:Toggle({
+UIControls.ToggleLuckFilter = FilterSection:Toggle({
     Title = "Collect by Luck",
     Desc = "Only collect eggs with equal to or higher luck than the specified threshold",
     Value = false,
@@ -2873,7 +2878,7 @@ FilterSection:Toggle({
     end
 })
 
-FilterSection:Input({
+UIControls.InputLuckFilter = FilterSection:Input({
     Title = "Egg Luck",
     Desc = "Enter minimum luck (e.g. 100, 2k, 1m, 300b)",
     Value = Config.MinLuckString,
@@ -2986,13 +2991,14 @@ local UnifiedSpeedSlider = MoveSection:Slider({
         end)
     end
 })
+UIControls.SliderSpeed = UnifiedSpeedSlider
 
 local MoveModifiersSection = MoveTab:Section({
     Title = "Movement Modifiers",
     Opened = true
 })
 
-MoveModifiersSection:Toggle({
+UIControls.ToggleNoclip = MoveModifiersSection:Toggle({
     Title = "Noclip During Tween",
     Desc = "Disables player collision during tweening to prevent snagging on walls/trees",
     Value = true,
@@ -3022,7 +3028,7 @@ EggPanelSection:Button({
     end
 })
 
-EggPanelSection:Toggle({
+UIControls.ToggleEggESP = EggPanelSection:Toggle({
     Title = "Egg ESP",
     Desc = "Display real-time 3D markers on eggs with egg type, luck value, and distance",
     Value = Config.ESPEnabled,
@@ -3037,7 +3043,7 @@ EggPanelSection:Toggle({
     end
 })
 
-EggPanelSection:Input({
+UIControls.InputESPFilter = EggPanelSection:Input({
     Title = "ESP Manager",
     Desc = "Set minimum luck filter (e.g. 100, 20k, 1m, 300b). Hides all eggs below this threshold",
     Value = Config.ESPMinLuckString,
@@ -3130,7 +3136,7 @@ local UtilsAutoSection = UtilitiesTab:Section({
     Opened = true
 })
 
-UtilsAutoSection:Toggle({
+UIControls.ToggleAutoIndex = UtilsAutoSection:Toggle({
     Title = "Auto Collect Index",
     Desc = "Continuously and automatically claims available Index pet discovery rewards",
     Value = false,
@@ -3145,7 +3151,7 @@ UtilsAutoSection:Toggle({
     end
 })
 
-UtilsAutoSection:Toggle({
+UIControls.ToggleAutoRebirth = UtilsAutoSection:Toggle({
     Title = "Auto Rebirth",
     Desc = "Automatically triggers Rebirth as soon as requirements (cash & pet) are met",
     Value = false,
@@ -3160,7 +3166,7 @@ UtilsAutoSection:Toggle({
     end
 })
 
-UtilsAutoSection:Toggle({
+UIControls.ToggleAutoHatchLuck = UtilsAutoSection:Toggle({
     Title = "Auto Upgrade Hatch Luck",
     Desc = "Automatically purchases Hatch Luck upgrades on your plot whenever affordable",
     Value = false,
@@ -3421,7 +3427,7 @@ local WebhookConfigSection = WebhookTab:Section({
     Opened = true
 })
 
-WebhookConfigSection:Toggle({
+UIControls.ToggleWebhook = WebhookConfigSection:Toggle({
     Title = "Enable Discord Webhook",
     Desc = "Toggles sending real-time egg farming & weather alerts to your Discord channel",
     Value = false,
@@ -3441,7 +3447,7 @@ WebhookConfigSection:Toggle({
     end
 })
 
-WebhookConfigSection:Input({
+UIControls.InputWebhookURL = WebhookConfigSection:Input({
     Title = "Discord Webhook URL",
     Desc = "Enter your Discord channel webhook URL",
     Value = Config.WebhookURL,
@@ -3504,7 +3510,7 @@ local WebhookTriggersSection = WebhookTab:Section({
     Opened = true
 })
 
-WebhookTriggersSection:Toggle({
+UIControls.ToggleEggNotifications = WebhookTriggersSection:Toggle({
     Title = "Egg Notifications",
     Desc = "Send egg stats whenever an egg is collected and deposited",
     Value = Config.EggNotifications,
@@ -3513,7 +3519,7 @@ WebhookTriggersSection:Toggle({
     end
 })
 
-WebhookTriggersSection:Toggle({
+UIControls.ToggleWeatherNotifications = WebhookTriggersSection:Toggle({
     Title = "Weather Notifications",
     Desc = "Send notification for each weather event and when weather changes",
     Value = Config.WeatherNotifications,
@@ -3540,7 +3546,7 @@ local AppearanceSection = SettingsTab:Section({
     Opened = true
 })
 
-AppearanceSection:Slider({
+UIControls.SliderHUDScale = AppearanceSection:Slider({
     Title = "HUD Scale",
     Desc = "Adjust size of the entire HUD (80% to 150%)",
     Value = {
@@ -3550,6 +3556,7 @@ AppearanceSection:Slider({
     },
     Step = 5,
     Callback = function(scalePercent)
+        Config.HUDScale = scalePercent
         pcall(function()
             Window:SetUIScale(scalePercent / 100)
         end)
@@ -3561,6 +3568,275 @@ AppearanceSection:Button({
     Desc = "Re-centers the Frost Hub window on your screen",
     Callback = function()
         Window:SetToTheCenter()
+    end
+})
+
+--------------------------------------------------------------------------------
+-- CONFIGURATION SECTION (SAVE & LOAD SETTINGS)
+--------------------------------------------------------------------------------
+local ConfigurationSection = SettingsTab:Section({
+    Title = "Configuration",
+    Opened = true
+})
+
+local ConfigStatusParagraph = ConfigurationSection:Paragraph({
+    Title = "◈ Configuration Status",
+    Desc = "• Status: Checking for saved config...\n• File: FrostHub/config.json"
+})
+
+local function updateConfigStatusDisplay()
+    pcall(function()
+        if not ConfigStatusParagraph then return end
+        local hasFile = false
+        pcall(function()
+            if isfile and isfile("FrostHub/config.json") then
+                hasFile = true
+            end
+        end)
+
+        if hasFile then
+            local infoStr = "Saved configuration available"
+            pcall(function()
+                local raw = readfile("FrostHub/config.json")
+                local data = HttpService:JSONDecode(raw)
+                if data and data.SavedAt then
+                    infoStr = "Last saved: " .. tostring(data.SavedAt)
+                end
+            end)
+            ConfigStatusParagraph:SetDesc("• Status: Saved config ready\n• File: FrostHub/config.json\n• " .. infoStr)
+        else
+            ConfigStatusParagraph:SetDesc("• Status: No saved config found\n• File: FrostHub/config.json\n• Click 'Save Config' below to save your current settings.")
+        end
+    end)
+end
+
+updateConfigStatusDisplay()
+
+ConfigurationSection:Button({
+    Title = "💾 Save Config",
+    Desc = "Saves your current toggles, filters, speed, and settings to FrostHub/config.json",
+    Callback = function()
+        pcall(function()
+            if not (writefile and isfolder and makefolder) then
+                WindUI:Notify({
+                    Title = "Config System",
+                    Content = "Your executor does not support writefile.",
+                    Duration = 4,
+                    Icon = "circle-alert"
+                })
+                return
+            end
+
+            pcall(function()
+                if not isfolder("FrostHub") then
+                    makefolder("FrostHub")
+                end
+            end)
+
+            local configData = {
+                AutoCollect = State.Enabled,
+                CollectByLuck = Config.CollectByLuck,
+                MinLuckString = Config.MinLuckString or "1m",
+                Speed = Config.Speed or 60,
+                NoclipOnTween = Config.NoclipOnTween,
+                EggESP = (EggESP and EggESP.Enabled) or false,
+                ESPMinLuckString = Config.ESPMinLuckString or "0",
+                AutoIndex = (UtilitiesConfig and UtilitiesConfig.AutoIndex) or false,
+                AutoRebirth = (UtilitiesConfig and UtilitiesConfig.AutoRebirth) or false,
+                AutoHatchLuck = (UtilitiesConfig and UtilitiesConfig.AutoHatchLuck) or false,
+                WebhookEnabled = Config.WebhookEnabled or false,
+                WebhookURL = Config.WebhookURL or "",
+                EggNotifications = Config.EggNotifications ~= false,
+                WeatherNotifications = Config.WeatherNotifications ~= false,
+                HUDScale = Config.HUDScale or 100,
+                SavedAt = os.date("%Y-%m-%d %H:%M:%S"),
+                SavedTimestamp = os.time()
+            }
+
+            local jsonString = HttpService:JSONEncode(configData)
+            writefile("FrostHub/config.json", jsonString)
+
+            updateConfigStatusDisplay()
+
+            WindUI:Notify({
+                Title = "Config Saved",
+                Content = "Settings saved to FrostHub/config.json successfully!",
+                Duration = 3.5,
+                Icon = "check-circle"
+            })
+        end)
+    end
+})
+
+ConfigurationSection:Button({
+    Title = "📂 Load Config",
+    Desc = "Restores your saved settings without having to re-enable everything manually",
+    Callback = function()
+        pcall(function()
+            if not (readfile and isfile) then
+                WindUI:Notify({
+                    Title = "Config System",
+                    Content = "Your executor does not support readfile.",
+                    Duration = 4,
+                    Icon = "circle-alert"
+                })
+                return
+            end
+
+            if not isfile("FrostHub/config.json") then
+                WindUI:Notify({
+                    Title = "No Saved Config",
+                    Content = "No saved configuration file found in FrostHub/config.json!\nPlease click 'Save Config' first to save your settings.",
+                    Duration = 4,
+                    Icon = "circle-alert"
+                })
+                return
+            end
+
+            local raw = readfile("FrostHub/config.json")
+            local data = nil
+            local success, err = pcall(function()
+                data = HttpService:JSONDecode(raw)
+            end)
+
+            if not success or not data or typeof(data) ~= "table" then
+                WindUI:Notify({
+                    Title = "Config Error",
+                    Content = "Failed to parse saved config file.",
+                    Duration = 4,
+                    Icon = "circle-alert"
+                })
+                return
+            end
+
+            -- Apply Settings safely through UI controls
+            -- 1. Movement & Tween Speed
+            if data.Speed ~= nil then
+                Config.Speed = tonumber(data.Speed) or 60
+                if UIControls.SliderSpeed then
+                    pcall(function() UIControls.SliderSpeed:Set(Config.Speed) end)
+                end
+            end
+            if data.NoclipOnTween ~= nil then
+                Config.NoclipOnTween = (data.NoclipOnTween == true)
+                if UIControls.ToggleNoclip then
+                    pcall(function() UIControls.ToggleNoclip:Set(Config.NoclipOnTween) end)
+                end
+            end
+
+            -- 2. Egg Luck Filtering
+            if data.MinLuckString ~= nil then
+                local parsed = parseValueString(tostring(data.MinLuckString))
+                Config.MinLuck = parsed > 0 and parsed or 1000000
+                Config.MinLuckString = tostring(data.MinLuckString)
+                Config.MinValue = Config.MinLuck
+                Config.MinValueString = Config.MinLuckString
+                if UIControls.InputLuckFilter then
+                    pcall(function() UIControls.InputLuckFilter:Set(Config.MinLuckString) end)
+                end
+            end
+            if data.CollectByLuck ~= nil then
+                Config.CollectByLuck = (data.CollectByLuck == true)
+                Config.CollectByValue = Config.CollectByLuck
+                if UIControls.ToggleLuckFilter then
+                    pcall(function() UIControls.ToggleLuckFilter:Set(Config.CollectByLuck) end)
+                end
+            end
+
+            -- 3. Egg ESP & Filter
+            if data.ESPMinLuckString ~= nil then
+                local parsed = parseValueString(tostring(data.ESPMinLuckString))
+                Config.ESPMinLuck = parsed
+                Config.ESPMinLuckString = tostring(data.ESPMinLuckString)
+                if EggESP and EggESP.SetMinLuck then
+                    pcall(function() EggESP:SetMinLuck(parsed, Config.ESPMinLuckString) end)
+                end
+                if UIControls.InputESPFilter then
+                    pcall(function() UIControls.InputESPFilter:Set(Config.ESPMinLuckString) end)
+                end
+            end
+            if data.EggESP ~= nil then
+                Config.ESPEnabled = (data.EggESP == true)
+                if EggESP and EggESP.SetEnabled then
+                    pcall(function() EggESP:SetEnabled(Config.ESPEnabled) end)
+                end
+                if UIControls.ToggleEggESP then
+                    pcall(function() UIControls.ToggleEggESP:Set(Config.ESPEnabled) end)
+                end
+            end
+
+            -- 4. Utilities Automation
+            if data.AutoIndex ~= nil then
+                UtilitiesConfig.AutoIndex = (data.AutoIndex == true)
+                if UIControls.ToggleAutoIndex then
+                    pcall(function() UIControls.ToggleAutoIndex:Set(UtilitiesConfig.AutoIndex) end)
+                end
+            end
+            if data.AutoRebirth ~= nil then
+                UtilitiesConfig.AutoRebirth = (data.AutoRebirth == true)
+                if UIControls.ToggleAutoRebirth then
+                    pcall(function() UIControls.ToggleAutoRebirth:Set(UtilitiesConfig.AutoRebirth) end)
+                end
+            end
+            if data.AutoHatchLuck ~= nil then
+                UtilitiesConfig.AutoHatchLuck = (data.AutoHatchLuck == true)
+                if UIControls.ToggleAutoHatchLuck then
+                    pcall(function() UIControls.ToggleAutoHatchLuck:Set(UtilitiesConfig.AutoHatchLuck) end)
+                end
+            end
+
+            -- 5. Webhook Setup & Preferences
+            if data.WebhookURL ~= nil then
+                Config.WebhookURL = tostring(data.WebhookURL)
+                if UIControls.InputWebhookURL then
+                    pcall(function() UIControls.InputWebhookURL:Set(Config.WebhookURL) end)
+                end
+            end
+            if data.WebhookEnabled ~= nil then
+                Config.WebhookEnabled = (data.WebhookEnabled == true)
+                if UIControls.ToggleWebhook then
+                    pcall(function() UIControls.ToggleWebhook:Set(Config.WebhookEnabled) end)
+                end
+            end
+            if data.EggNotifications ~= nil then
+                Config.EggNotifications = (data.EggNotifications == true)
+                if UIControls.ToggleEggNotifications then
+                    pcall(function() UIControls.ToggleEggNotifications:Set(Config.EggNotifications) end)
+                end
+            end
+            if data.WeatherNotifications ~= nil then
+                Config.WeatherNotifications = (data.WeatherNotifications == true)
+                if UIControls.ToggleWeatherNotifications then
+                    pcall(function() UIControls.ToggleWeatherNotifications:Set(Config.WeatherNotifications) end)
+                end
+            end
+
+            -- 6. HUD Scale
+            if data.HUDScale ~= nil then
+                Config.HUDScale = tonumber(data.HUDScale) or 100
+                pcall(function() Window:SetUIScale(Config.HUDScale / 100) end)
+                if UIControls.SliderHUDScale then
+                    pcall(function() UIControls.SliderHUDScale:Set(Config.HUDScale) end)
+                end
+            end
+
+            -- 7. Auto Collect Eggs (Restored last so speed, filter & noclip are active before farming starts)
+            if data.AutoCollect ~= nil then
+                if UIControls.ToggleAuto then
+                    pcall(function() UIControls.ToggleAuto:Set(data.AutoCollect == true) end)
+                end
+            end
+
+            updateStatusUI()
+            updateConfigStatusDisplay()
+
+            WindUI:Notify({
+                Title = "Config Loaded",
+                Content = "All saved settings have been restored successfully!",
+                Duration = 3.5,
+                Icon = "check-circle"
+            })
+        end)
     end
 })
 
