@@ -35,16 +35,6 @@
       "created_by": "System",
       "created_by_name": "FrostHub",
       "status": "Active"
-    },
-    {
-      "key": "FROST-TEST-REVOKE-9999",
-      "created_at": 1789756708,
-      "expires_at": 1789843108,
-      "duration": "1 Day",
-      "created_by": "TestSystem",
-      "created_by_name": "Tester",
-      "status": "Revoked",
-      "revoked_at": 1789756710
     }
   ]
 }
