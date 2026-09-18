@@ -1,3 +1,13 @@
 {
-  "keys": []
+  "keys": [
+    {
+      "key": "FROST-DEMO-TEST-KEY1",
+      "created_at": 1789753000,
+      "expires_at": 1790357800,
+      "duration": "7 Days",
+      "created_by": "1550562639829274697",
+      "created_by_name": "FrostHubAdmin",
+      "status": "Active"
+    }
+  ]
 }
