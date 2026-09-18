@@ -71,7 +71,7 @@ The official Frost Hub Discord Bot manages community keys and announcements:
 - **🛡️ `,verifysetup`**: Sends the official verification embed with **Add Bot to Your App** and **Verify & Claim Roles** buttons directly into channel `<#1550596467075452968>`. Pings `<@&1549092244374421554>` and grants the Member and Section roles upon clicking verify, with support tickets directed to `<#1549104953463803934>` and successful verifications logged in `<#1549394258644176917>`. (Admin/Authorized restricted).
 - **ℹ️ `,info [#channel]`**: Sends official script info to a selected channel (e.g. `,info #general`), directs users to `<#1550589425497542676>` to claim their free 6-hour key, links support tickets to `<#1549104953463803934>`, and attaches an interactive **Supported Games** button displaying `Ride a Pet`. If run in or directed to the verification channel, automatically deploys verification setup.
 - **🔑 `/create key <length>`**: Generate keys with custom durations (Admin restricted).
-- **📋 `/keys [filter]`**: View all active, expired, and revoked keys with audit data (Admin restricted).
+- **📋 `,keys [filter]`**: View all keys in a public embed with interactive **Previous** and **Next** page swipe buttons. Supports filters: `,keys active` (active keys only), `,keys revoked` (revoked keys only), `,keys expired` (expired keys only), or `,keys` (all keys). Restricted to role ID `1550567704925044858`.
 - **🚫 `/revoke key <key>`**: Instantly revoke keys with immediate GitHub sync and in-game cutoff (Admin restricted).
 
 ### 📥 Load Script
