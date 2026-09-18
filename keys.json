@@ -43,7 +43,7 @@
       "duration": "Lifetime",
       "created_by": "System",
       "created_by_name": "FrostHub",
-      "status": "Revoked",
+      "status": "Active",
       "revoked_at": 1789763777,
       "revoked_by": 1303832901540122656,
       "revoked_by_name": "cupidat"
