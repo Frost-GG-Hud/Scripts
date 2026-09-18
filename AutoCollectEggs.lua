@@ -913,7 +913,7 @@ function EggPanel:Init()
         self.Gui = nil
     end
 
-    local parentGui = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+    local parentGui = LocalPlayer:WaitForChild("PlayerGui")
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "FrostHub_EggPanelGui"
@@ -1326,18 +1326,14 @@ end
 function EggPanel:RenderCards()
     if not self.CardScroll then return end
 
-    for _, child in ipairs(self.CardScroll:GetChildren()) do
-        if child:IsA("Frame") or child:IsA("TextLabel") then
-            child:Destroy()
-        end
-    end
-
     local eggs = self.LastEggList or {}
     local query = self.SearchQuery or ""
     local filter = self.ActiveFilter or "All"
     local isAll = (filter == "All" or filter == "Any")
 
+    local activeCardNames = {}
     local visibleCount = 0
+
     for i, egg in ipairs(eggs) do
         local matchesFilter = isAll or (string.lower(egg.Rarity) == string.lower(filter))
         local matchesSearch = (query == "")
@@ -1346,150 +1342,190 @@ function EggPanel:RenderCards()
 
         if matchesFilter and matchesSearch then
             visibleCount = visibleCount + 1
+            local cardName = "EggCard_" .. egg.Name
+            activeCardNames[cardName] = true
 
-            local card = Instance.new("Frame")
-            card.Name = "EggCard_" .. egg.Name
-            card.Size = UDim2.new(1, 0, 0, 58)
-            card.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-            card.BorderSizePixel = 0
-            card.LayoutOrder = i
-            card.Parent = self.CardScroll
-
-            local cCorner = Instance.new("UICorner")
-            cCorner.CornerRadius = UDim.new(0, 10)
-            cCorner.Parent = card
-
-            local cStroke = Instance.new("UIStroke")
-            cStroke.Color = Color3.fromRGB(38, 38, 44)
-            cStroke.Thickness = 1
-            cStroke.Parent = card
-
-            card.MouseEnter:Connect(function()
-                card.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
-                cStroke.Color = Color3.fromRGB(52, 52, 60)
-            end)
-            card.MouseLeave:Connect(function()
-                card.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-                cStroke.Color = Color3.fromRGB(38, 38, 44)
-            end)
-
-            -- Left vertical color accent bar
-            local accent = Instance.new("Frame")
-            accent.Name = "RarityAccent"
-            accent.Size = UDim2.new(0, 3.5, 1, -16)
-            accent.Position = UDim2.new(0, 5, 0, 8)
-            accent.BackgroundColor3 = RARITY_COLORS[egg.Rarity] or Color3.fromRGB(0, 145, 255)
-            accent.BorderSizePixel = 0
-            accent.Parent = card
-            local aCorner = Instance.new("UICorner")
-            aCorner.CornerRadius = UDim.new(0, 2)
-            aCorner.Parent = accent
-
-            -- Egg Thumbnail Image
-            local iconHolder = Instance.new("Frame")
-            iconHolder.Name = "IconHolder"
-            iconHolder.Size = UDim2.new(0, 40, 0, 40)
-            iconHolder.Position = UDim2.new(0, 15, 0.5, -20)
-            iconHolder.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
-            iconHolder.BorderSizePixel = 0
-            iconHolder.Parent = card
-            local iconCorner = Instance.new("UICorner")
-            iconCorner.CornerRadius = UDim.new(0, 8)
-            iconCorner.Parent = iconHolder
-
-            local iconStroke = Instance.new("UIStroke")
-            iconStroke.Color = Color3.fromRGB(44, 44, 52)
-            iconStroke.Thickness = 1
-            iconStroke.Parent = iconHolder
-
-            if egg.Image and egg.Image ~= "" then
-                local img = Instance.new("ImageLabel")
-                img.Image = egg.Image
-                img.Size = UDim2.new(0.85, 0, 0.85, 0)
-                img.Position = UDim2.new(0.075, 0, 0.075, 0)
-                img.BackgroundTransparency = 1
-                img.Parent = iconHolder
+            local card = self.CardScroll:FindFirstChild(cardName)
+            if card then
+                -- Card already exists: update dynamic count, distance, and layout order in-place
+                card.LayoutOrder = i
+                local sub = card:FindFirstChild("SubLabel")
+                if sub then
+                    sub.Text = string.format("%s • x%d In World • %d studs", egg.Rarity, egg.Count, egg.Distance)
+                end
+                local badge = card:FindFirstChild("LuckBadge")
+                local valLbl = badge and badge:FindFirstChild("LuckValueLabel")
+                if valLbl then
+                    valLbl.Text = formatValueString(egg.Luck) .. " Luck"
+                end
             else
-                local fallbackTxt = Instance.new("TextLabel")
-                fallbackTxt.Text = "🥚"
-                fallbackTxt.Size = UDim2.new(1, 0, 1, 0)
-                fallbackTxt.BackgroundTransparency = 1
-                fallbackTxt.TextSize = 20
-                fallbackTxt.Parent = iconHolder
+                -- Create new card
+                card = Instance.new("Frame")
+                card.Name = cardName
+                card.Size = UDim2.new(1, 0, 0, 58)
+                card.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+                card.BorderSizePixel = 0
+                card.LayoutOrder = i
+                card.Parent = self.CardScroll
+
+                local cCorner = Instance.new("UICorner")
+                cCorner.CornerRadius = UDim.new(0, 10)
+                cCorner.Parent = card
+
+                local cStroke = Instance.new("UIStroke")
+                cStroke.Color = Color3.fromRGB(38, 38, 44)
+                cStroke.Thickness = 1
+                cStroke.Parent = card
+
+                card.MouseEnter:Connect(function()
+                    card.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+                    cStroke.Color = Color3.fromRGB(52, 52, 60)
+                end)
+                card.MouseLeave:Connect(function()
+                    card.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+                    cStroke.Color = Color3.fromRGB(38, 38, 44)
+                end)
+
+                -- Left vertical color accent bar
+                local accent = Instance.new("Frame")
+                accent.Name = "RarityAccent"
+                accent.Size = UDim2.new(0, 3.5, 1, -16)
+                accent.Position = UDim2.new(0, 5, 0, 8)
+                accent.BackgroundColor3 = RARITY_COLORS[egg.Rarity] or Color3.fromRGB(0, 145, 255)
+                accent.BorderSizePixel = 0
+                accent.Parent = card
+                local aCorner = Instance.new("UICorner")
+                aCorner.CornerRadius = UDim.new(0, 2)
+                aCorner.Parent = accent
+
+                -- Egg Thumbnail Image
+                local iconHolder = Instance.new("Frame")
+                iconHolder.Name = "IconHolder"
+                iconHolder.Size = UDim2.new(0, 40, 0, 40)
+                iconHolder.Position = UDim2.new(0, 15, 0.5, -20)
+                iconHolder.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
+                iconHolder.BorderSizePixel = 0
+                iconHolder.Parent = card
+                local iconCorner = Instance.new("UICorner")
+                iconCorner.CornerRadius = UDim.new(0, 8)
+                iconCorner.Parent = iconHolder
+
+                local iconStroke = Instance.new("UIStroke")
+                iconStroke.Color = Color3.fromRGB(44, 44, 52)
+                iconStroke.Thickness = 1
+                iconStroke.Parent = iconHolder
+
+                if egg.Image and egg.Image ~= "" then
+                    local img = Instance.new("ImageLabel")
+                    img.Image = egg.Image
+                    img.Size = UDim2.new(0.85, 0, 0.85, 0)
+                    img.Position = UDim2.new(0.075, 0, 0.075, 0)
+                    img.BackgroundTransparency = 1
+                    img.Parent = iconHolder
+                else
+                    local fallbackTxt = Instance.new("TextLabel")
+                    fallbackTxt.Text = "🥚"
+                    fallbackTxt.Size = UDim2.new(1, 0, 1, 0)
+                    fallbackTxt.BackgroundTransparency = 1
+                    fallbackTxt.TextSize = 20
+                    fallbackTxt.Parent = iconHolder
+                end
+
+                -- Egg Name & Details
+                local nameLabel = Instance.new("TextLabel")
+                nameLabel.Name = "NameLabel"
+                nameLabel.Text = egg.Name
+                nameLabel.Size = UDim2.new(1, -180, 0, 20)
+                nameLabel.Position = UDim2.new(0, 66, 0, 9)
+                nameLabel.BackgroundTransparency = 1
+                nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                nameLabel.TextSize = 13
+                nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+                setUIFont(nameLabel, Enum.FontWeight.SemiBold)
+                nameLabel.Parent = card
+
+                local subLabel = Instance.new("TextLabel")
+                subLabel.Name = "SubLabel"
+                subLabel.Text = string.format("%s • x%d In World • %d studs", egg.Rarity, egg.Count, egg.Distance)
+                subLabel.Size = UDim2.new(1, -180, 0, 16)
+                subLabel.Position = UDim2.new(0, 66, 0, 29)
+                subLabel.BackgroundTransparency = 1
+                subLabel.TextColor3 = Color3.fromRGB(161, 161, 170)
+                subLabel.TextSize = 10.5
+                subLabel.TextXAlignment = Enum.TextXAlignment.Left
+                setUIFont(subLabel, Enum.FontWeight.Medium)
+                subLabel.Parent = card
+
+                -- Right-aligned Luck Value Badge
+                local luckValueBadge = Instance.new("Frame")
+                luckValueBadge.Name = "LuckBadge"
+                luckValueBadge.Size = UDim2.new(0, 100, 0, 20)
+                luckValueBadge.Position = UDim2.new(1, -108, 0, 9)
+                luckValueBadge.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+                luckValueBadge.BorderSizePixel = 0
+                luckValueBadge.Parent = card
+
+                local badgeCorner = Instance.new("UICorner")
+                badgeCorner.CornerRadius = UDim.new(0, 6)
+                badgeCorner.Parent = luckValueBadge
+
+                local badgeStroke = Instance.new("UIStroke")
+                badgeStroke.Color = Color3.fromRGB(48, 48, 58)
+                badgeStroke.Thickness = 1
+                badgeStroke.Parent = luckValueBadge
+
+                local luckValueLabel = Instance.new("TextLabel")
+                luckValueLabel.Name = "LuckValueLabel"
+                luckValueLabel.Text = formatValueString(egg.Luck) .. " Luck"
+                luckValueLabel.Size = UDim2.new(1, 0, 1, 0)
+                luckValueLabel.BackgroundTransparency = 1
+                luckValueLabel.TextColor3 = Color3.fromRGB(56, 189, 248)
+                luckValueLabel.TextSize = 11.5
+                setUIFont(luckValueLabel, Enum.FontWeight.SemiBold)
+                luckValueLabel.Parent = luckValueBadge
+
+                local tierLabel = Instance.new("TextLabel")
+                tierLabel.Name = "TierLabel"
+                tierLabel.Text = "Tier " .. egg.Rarity
+                tierLabel.Size = UDim2.new(0, 100, 0, 16)
+                tierLabel.Position = UDim2.new(1, -108, 0, 30)
+                tierLabel.BackgroundTransparency = 1
+                tierLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
+                tierLabel.TextSize = 9.5
+                tierLabel.TextXAlignment = Enum.TextXAlignment.Right
+                setUIFont(tierLabel, Enum.FontWeight.Medium)
+                tierLabel.Parent = card
             end
-
-            -- Egg Name & Details
-            local nameLabel = Instance.new("TextLabel")
-            nameLabel.Text = egg.Name
-            nameLabel.Size = UDim2.new(1, -180, 0, 20)
-            nameLabel.Position = UDim2.new(0, 66, 0, 9)
-            nameLabel.BackgroundTransparency = 1
-            nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            nameLabel.TextSize = 13
-            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-            setUIFont(nameLabel, Enum.FontWeight.SemiBold)
-            nameLabel.Parent = card
-
-            local subLabel = Instance.new("TextLabel")
-            subLabel.Text = string.format("%s • x%d In World • %d studs", egg.Rarity, egg.Count, egg.Distance)
-            subLabel.Size = UDim2.new(1, -180, 0, 16)
-            subLabel.Position = UDim2.new(0, 66, 0, 29)
-            subLabel.BackgroundTransparency = 1
-            subLabel.TextColor3 = Color3.fromRGB(161, 161, 170)
-            subLabel.TextSize = 10.5
-            subLabel.TextXAlignment = Enum.TextXAlignment.Left
-            setUIFont(subLabel, Enum.FontWeight.Medium)
-            subLabel.Parent = card
-
-            -- Right-aligned Luck Value Badge
-            local luckValueBadge = Instance.new("Frame")
-            luckValueBadge.Name = "LuckBadge"
-            luckValueBadge.Size = UDim2.new(0, 100, 0, 20)
-            luckValueBadge.Position = UDim2.new(1, -108, 0, 9)
-            luckValueBadge.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
-            luckValueBadge.BorderSizePixel = 0
-            luckValueBadge.Parent = card
-
-            local badgeCorner = Instance.new("UICorner")
-            badgeCorner.CornerRadius = UDim.new(0, 6)
-            badgeCorner.Parent = luckValueBadge
-
-            local badgeStroke = Instance.new("UIStroke")
-            badgeStroke.Color = Color3.fromRGB(48, 48, 58)
-            badgeStroke.Thickness = 1
-            badgeStroke.Parent = luckValueBadge
-
-            local luckValueLabel = Instance.new("TextLabel")
-            luckValueLabel.Text = formatValueString(egg.Luck) .. " Luck"
-            luckValueLabel.Size = UDim2.new(1, 0, 1, 0)
-            luckValueLabel.BackgroundTransparency = 1
-            luckValueLabel.TextColor3 = Color3.fromRGB(56, 189, 248)
-            luckValueLabel.TextSize = 11.5
-            setUIFont(luckValueLabel, Enum.FontWeight.SemiBold)
-            luckValueLabel.Parent = luckValueBadge
-
-            local tierLabel = Instance.new("TextLabel")
-            tierLabel.Text = "Tier " .. egg.Rarity
-            tierLabel.Size = UDim2.new(0, 100, 0, 16)
-            tierLabel.Position = UDim2.new(1, -108, 0, 30)
-            tierLabel.BackgroundTransparency = 1
-            tierLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
-            tierLabel.TextSize = 9.5
-            tierLabel.TextXAlignment = Enum.TextXAlignment.Right
-            setUIFont(tierLabel, Enum.FontWeight.Medium)
-            tierLabel.Parent = card
         end
     end
 
+    -- Automatically remove any cards for eggs that are no longer on the map
+    for _, child in ipairs(self.CardScroll:GetChildren()) do
+        if child:IsA("Frame") and string.sub(child.Name, 1, 8) == "EggCard_" then
+            if not activeCardNames[child.Name] then
+                child:Destroy()
+            end
+        end
+    end
+
+    -- Empty state handling
+    local empty = self.CardScroll:FindFirstChild("EmptyLabel")
     if visibleCount == 0 then
-        local empty = Instance.new("TextLabel")
-        empty.Text = "No eggs matching criteria."
-        empty.Size = UDim2.new(1, 0, 0, 40)
-        empty.BackgroundTransparency = 1
-        empty.TextColor3 = Color3.fromRGB(140, 140, 150)
-        empty.TextSize = 12
-        setUIFont(empty, Enum.FontWeight.Medium)
-        empty.Parent = self.CardScroll
+        if not empty then
+            empty = Instance.new("TextLabel")
+            empty.Name = "EmptyLabel"
+            empty.Text = "No eggs matching criteria."
+            empty.Size = UDim2.new(1, 0, 0, 40)
+            empty.BackgroundTransparency = 1
+            empty.TextColor3 = Color3.fromRGB(140, 140, 150)
+            empty.TextSize = 12
+            setUIFont(empty, Enum.FontWeight.Medium)
+            empty.Parent = self.CardScroll
+        end
+    else
+        if empty then
+            empty:Destroy()
+        end
     end
 end
 
@@ -1543,6 +1579,23 @@ end
 
 function EggPanel:StartAutoUpdate()
     local thisRunId = ScriptRunId
+
+    -- Real-time egg spawn and collection listeners on workspace.RenderedEggs
+    local eggsFolder = workspace:FindFirstChild("RenderedEggs")
+    if eggsFolder then
+        eggsFolder.ChildAdded:Connect(function()
+            if self.IsOpen then
+                pcall(function() self:Refresh() end)
+            end
+        end)
+        eggsFolder.ChildRemoved:Connect(function()
+            if self.IsOpen then
+                pcall(function() self:Refresh() end)
+            end
+        end)
+    end
+
+    -- Real-time second-by-second timer countdown and distance radar
     task.spawn(function()
         while true do
             if getgenv and getgenv().FrostHubRunId ~= thisRunId then break end
@@ -1565,6 +1618,11 @@ pcall(function()
     end
     for _, c in ipairs(CoreGui:GetChildren()) do
         if string.find(c.Name, "Frost") or string.find(c.Name, "WindUI") then c:Destroy() end
+    end
+    if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
+        for _, c in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+            if string.find(c.Name, "FrostHub") then c:Destroy() end
+        end
     end
 
     -- Clean up any residual Lighting blur and restore game's EggTracker state
@@ -2074,6 +2132,10 @@ if getgenv then
     getgenv().FrostHubCleanup = function()
         pcall(function()
             if EggPanel.Gui then EggPanel.Gui:Destroy() end
+            if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
+                local old = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_EggPanelGui")
+                if old then old:Destroy() end
+            end
             local Lighting = game:GetService("Lighting")
             local blur = Lighting:FindFirstChildOfClass("BlurEffect") or Lighting:FindFirstChild("Blur")
             if blur and blur:IsA("BlurEffect") then blur.Enabled = false end
