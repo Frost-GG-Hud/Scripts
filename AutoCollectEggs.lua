@@ -92,8 +92,8 @@ end
 -- CONFIGURATION
 --------------------------------------------------------------------------------
 local Config = {
-    MovementMode = "Teleport & Tween Return", -- Teleport to egg, collect, tween back to base
-    Speed = 60,                          -- Movement speed for return Tween (0 to 350)
+    MovementMode = "Tween",              -- Standard movement mode: Tween to egg, collect, tween to base
+    Speed = 60,                          -- Movement speed for Tween (0 to 350)
     NoclipOnTween = true,
     AgentRadius = 2.0,
     AgentHeight = 5.0,
@@ -105,7 +105,6 @@ local Config = {
     CarriedWaitTimeout = 5.0,
     DepositWaitTimeout = 10.0,
     ScanRetryDelay = 1.5,
-    EggRegisterWait = 1.5,               -- Wait 1-2s at egg after teleporting before collecting
     -- Egg Luck Filtering
     CollectByLuck = false,
     CollectByValue = false,              -- Backwards-compatible alias
@@ -683,32 +682,8 @@ local function getCarriedCount()
 end
 
 --------------------------------------------------------------------------------
--- MOVEMENT SYSTEMS (TELEPORT TO EGG & TWEEN RETURN TO BASE)
+-- TWEEN MOVEMENT SYSTEM (ROUND TRIP: TWEEN TO EGG & TWEEN TO BASE)
 --------------------------------------------------------------------------------
-local function teleportTo(targetPos)
-    local hrp = getHRP()
-    local char = getCharacter()
-    if not hrp then return false end
-
-    if State.ActiveTween then
-        pcall(function()
-            State.ActiveTween:Cancel()
-        end)
-        State.ActiveTween = nil
-    end
-
-    local adjustedTarget = targetPos + Vector3.new(0, 2.5, 0)
-    pcall(function()
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.CFrame = CFrame.new(adjustedTarget)
-        if char then
-            char:PivotTo(CFrame.new(adjustedTarget))
-        end
-    end)
-    return true
-end
-
 local function moveToPoint(targetPos)
     local hrp = getHRP()
     local hum = getHumanoid()
@@ -842,7 +817,6 @@ local function runCollectionLoop()
                 State.EggsCollected = State.EggsCollected + 1
                 State.CurrentStatus = "Deposited Successfully!"
                 updateStatusUI()
-                task.wait(1.0)
             end
         end
 
@@ -875,24 +849,21 @@ local function runCollectionLoop()
         State.TargetEggName = target.Name
         State.TargetEggLuck = target.Luck
         State.TargetEggValue = target.Luck
-        State.CurrentStatus = string.format("Teleporting to %s [Luck: %s]...", target.Name, formatValueString(target.Luck))
+        State.CurrentStatus = string.format("Tweening to %s [Luck: %s] (%.0f studs)", target.Name, formatValueString(target.Luck), target.Distance)
         updateStatusUI()
 
-        -- 3. Teleport player directly to assigned egg
-        teleportTo(target.Part.Position)
-        State.CurrentStatus = string.format("Arrived at %s, registering...", target.Name)
-        updateStatusUI()
-        task.wait(Config.EggRegisterWait or 1.5)
+        -- 3. Tween player directly to assigned egg
+        local arrived = moveToPoint(target.Part.Position)
         if not State.Enabled then break end
 
         if not target.Model.Parent or not target.Prompt.Parent or not target.Prompt.Enabled then
             State.CurrentStatus = "Egg Claimed / Despawned, Retrying..."
             updateStatusUI()
-            task.wait(0.3)
+            task.wait(0.1)
             continue
         end
 
-        -- 4. Trigger collection
+        -- 4. Trigger collection instantly from its spot once reached
         State.CurrentStatus = string.format("Collecting %s...", target.Name)
         updateStatusUI()
 
@@ -913,7 +884,7 @@ local function runCollectionLoop()
         if not confirmedCarried and getCarriedCount() == preCount then
             State.CurrentStatus = "Collection Retrying..."
             updateStatusUI()
-            task.wait(0.4)
+            task.wait(0.3)
             continue
         end
 
@@ -938,7 +909,7 @@ local function runCollectionLoop()
 
         local depositStart = os.clock()
         while State.Enabled and getCarriedCount() > 0 and os.clock() - depositStart < Config.DepositWaitTimeout do
-            task.wait(0.2)
+            task.wait(0.15)
         end
 
         local eggFarmed = false
@@ -960,8 +931,8 @@ local function runCollectionLoop()
             sendEggFarmedWebhook(target)
         end
 
-        -- Wait 1 second at the player's plot before teleporting to the next assigned egg
-        task.wait(1.0)
+        -- Immediately repeat loop with next assigned egg once stored in plot
+        task.wait(0.05)
     end
 
     State.CurrentStatus = "Stopped"
@@ -2818,7 +2789,7 @@ SessionSection:Paragraph({
 
 SessionSection:Paragraph({
     Title = "🎮 Controls & Shortcuts",
-    Desc = "• Toggle Menu: RightControl or RightShift\n• Center Window: Settings Tab -> Center Window\n• Scale HUD: Settings Tab -> HUD Scale\n• Movement Speed: Adjust Return Tween speed instantly from 0 to 350 studs/s"
+    Desc = "• Toggle Menu: RightControl or RightShift\n• Center Window: Settings Tab -> Center Window\n• Scale HUD: Settings Tab -> HUD Scale\n• Movement Speed: Adjust Tween speed instantly from 0 to 350 studs/s"
 })
 
 -- Automatically select Information Tab upon initial load
@@ -2992,8 +2963,8 @@ local MoveSection = MoveTab:Section({
 
 -- MOVEMENT SPEED CHANGER (0 to 350 studs/s, applied instantly)
 local UnifiedSpeedSlider = MoveSection:Slider({
-    Title = "Return Tween Speed",
-    Desc = "Adjust speed when tweening back to base (0 to 350 studs/s, applied instantly)",
+    Title = "Movement Speed",
+    Desc = "Adjust tween speed from 0 to 350 studs/s (applied instantly)",
     Value = {
         Min = 0,
         Max = 350,
