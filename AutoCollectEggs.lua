@@ -2680,12 +2680,12 @@ InfoTab = Window:Tab({
 })
 
 local InformationSection = InfoTab:Section({
-    Title = "❄️ Information",
+    Title = "✦ Key Information",
     Opened = true
 })
 
 local KeyInfoParagraph = InformationSection:Paragraph({
-    Title = "🔑 Key",
+    Title = "◈ License Key",
     Desc = "Loading key details..."
 })
 
@@ -2708,39 +2708,26 @@ updateInfoSection()
 
 -- Automatic real-time key remaining duration updater (every 1s)
 task.spawn(function()
-    while task.wait(1) do
+    while true do
+        task.wait(1)
         if KeyInfoParagraph then
-            updateInfoSection()
+            pcall(updateInfoSection)
         end
     end
 end)
 
-InformationSection:Button({
-    Title = "🔄 Refresh Key",
-    Desc = "Recalculate remaining key time and refresh display",
-    Callback = function()
-        updateInfoSection()
-        WindUI:Notify({
-            Title = "Key Refreshed",
-            Content = "Remaining: " .. formatKeyRemaining(),
-            Duration = 2.5,
-            Icon = "rotate-ccw"
-        })
-    end
-})
-
 local CommunitySection = InfoTab:Section({
-    Title = "💬 Community & Support",
+    Title = "❖ Community & Support",
     Opened = true
 })
 
 CommunitySection:Paragraph({
-    Title = "💬 Join Our Discord Server",
+    Title = "⟡ Official Community",
     Desc = "Join the official Frost Hub community for free keys, updates, giveaways, and developer announcements!\n\n• Server Link: " .. DISCORD_INVITE_URL
 })
 
 CommunitySection:Button({
-    Title = "📋 Copy Discord Server Invite",
+    Title = "❐ Copy Discord Invite",
     Desc = "Copies " .. DISCORD_INVITE_URL .. " to your clipboard",
     Callback = function()
         pcall(function()
@@ -2759,17 +2746,17 @@ CommunitySection:Button({
 })
 
 CommunitySection:Paragraph({
-    Title = "🎫 Support Tickets & Key Tutorial",
+    Title = "✦ Support & Documentation",
     Desc = "• Need Help or Found a Bug? Open a support ticket in our Discord server.\n• Key Tutorial: Check out the step-by-step tutorial in the #get-script-key channel."
 })
 
 local SessionSection = InfoTab:Section({
-    Title = "📊 Session & Player Overview",
+    Title = "◈ Session & Player Overview",
     Opened = true
 })
 
 SessionSection:Paragraph({
-    Title = "👤 Farmer Details",
+    Title = "◆ Farmer Profile",
     Desc = string.format("• Player: %s (@%s)\n• User ID: %s\n• Account Age: %d days\n• Place ID: %s",
         LocalPlayer.DisplayName or LocalPlayer.Name,
         LocalPlayer.Name,
@@ -2780,7 +2767,7 @@ SessionSection:Paragraph({
 })
 
 SessionSection:Paragraph({
-    Title = "⌨️ Controls & Shortcuts",
+    Title = "⚡ Controls & Shortcuts",
     Desc = "• Toggle Menu: RightControl or RightShift\n• Center Window: Settings Tab -> Center Window\n• Scale HUD: Settings Tab -> HUD Scale\n• Movement Speed: Adjust Tween speed instantly from 0 to 375 studs/s"
 })
 
