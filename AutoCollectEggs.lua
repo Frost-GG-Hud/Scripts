@@ -124,6 +124,12 @@ local Config = {
     IncludeFarmerStats = true,           -- Include farmer name, session time, and pace
 }
 
+local UtilitiesConfig = {
+    AutoIndex = false,
+    AutoRebirth = false,
+    AutoHatchLuck = false,
+}
+
 --------------------------------------------------------------------------------
 -- STATE
 --------------------------------------------------------------------------------
@@ -1941,7 +1947,7 @@ end)
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local Window = WindUI:CreateWindow({
-    Title = "Frost Hub | Auto Collect",
+    Title = "Frost Hub | Automation",
     Icon = "snowflake",
     Author = "Prototyping & Testing Suite",
     Folder = "FrostHub",
@@ -1956,11 +1962,11 @@ local Window = WindUI:CreateWindow({
 })
 
 --------------------------------------------------------------------------------
--- TAB 1: AUTO COLLECT
+-- TAB 1: AUTOMATION
 --------------------------------------------------------------------------------
 local MainTab = Window:Tab({
-    Title = "Auto Collect",
-    Icon = "egg"
+    Title = "Automation",
+    Icon = "sparkles"
 })
 
 local MainSection = MainTab:Section({
@@ -2081,25 +2087,6 @@ end
 local ActionsSection = MainTab:Section({
     Title = "Manual Triggers",
     Opened = true
-})
-
-ActionsSection:Button({
-    Title = "Deposit Carried Eggs",
-    Desc = "Immediately moves to player plot to deposit any carried eggs",
-    Callback = function()
-        task.spawn(function()
-            local depositPos = getDepositTargetPosition()
-            if depositPos then
-                WindUI:Notify({
-                    Title = "Navigating to Plot",
-                    Content = "Moving to your plot deposit area...",
-                    Duration = 2,
-                    Icon = "home"
-                })
-                moveToPoint(depositPos)
-            end
-        end)
-    end
 })
 
 ActionsSection:Button({
@@ -2254,70 +2241,188 @@ EggPanelSection:Input({
     end
 })
 
-local espPresets = {
-    { label = "All Eggs (0+)", value = 0, str = "0" },
-    { label = "20K+ Luck", value = 20000, str = "20k" },
-    { label = "100K+ Luck", value = 100000, str = "100k" },
-    { label = "1M+ Luck", value = 1000000, str = "1m" },
-    { label = "50M+ Luck", value = 50000000, str = "50m" },
-    { label = "1B+ Luck", value = 1000000000, str = "1b" },
-}
-local currentPresetIndex = 1
+--------------------------------------------------------------------------------
+-- TAB 4: UTILITIES
+--------------------------------------------------------------------------------
+local UtilitiesTab = Window:Tab({
+    Title = "Utilities",
+    Icon = "wrench"
+})
 
-EggPanelSection:Button({
-    Title = "ESP Manager Presets",
-    Desc = "Quick-cycle through luck filter thresholds (All, 20K+, 100K+, 1M+, 50M+, 1B+)",
+local ShopsSection = UtilitiesTab:Section({
+    Title = "Shops",
+    Opened = true
+})
+
+ShopsSection:Button({
+    Title = "Open Gear Shop",
+    Desc = "Opens the in-game Gear Shop interface to purchase radars and equipment",
     Callback = function()
-        currentPresetIndex = (currentPresetIndex % #espPresets) + 1
-        local preset = espPresets[currentPresetIndex]
-        Config.ESPMinLuck = preset.value
-        Config.ESPMinLuckString = preset.str
-        EggESP:SetMinLuck(preset.value, preset.str)
+        pcall(function()
+            local shop = LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main:FindFirstChild("Shop")
+            if shop then
+                shop.Visible = true
+                if shop:FindFirstChild("Holders") then
+                    if shop.Holders:FindFirstChild("Gears") then shop.Holders.Gears.Visible = true end
+                    if shop.Holders:FindFirstChild("Food") then shop.Holders.Food.Visible = false end
+                end
+                if shop:FindFirstChild("Header") and shop.Header:FindFirstChild("Title") then
+                    shop.Header.Title.Text = "Gear Shop"
+                end
+            end
+            local prompt = workspace:FindFirstChild("Stalls") and workspace.Stalls:FindFirstChild("Gears") and workspace.Stalls.Gears:FindFirstChild("Rick") and workspace.Stalls.Gears.Rick:FindFirstChild("Torso") and workspace.Stalls.Gears.Rick.Torso:FindFirstChildOfClass("ProximityPrompt")
+            if prompt then fireproximityprompt(prompt) end
+        end)
         WindUI:Notify({
-            Title = "ESP Preset Applied",
-            Content = string.format("Filter set to: %s", preset.label),
+            Title = "Gear Shop Opened",
+            Content = "Gear Shop menu is now active.",
             Duration = 2,
-            Icon = "sparkles"
+            Icon = "shopping-bag"
         })
     end
 })
 
-local ESPStatusParagraph = EggPanelSection:Paragraph({
-    Title = "Egg ESP Status",
-    Desc = "ESP Status: Disabled\nActive Filter: All Eggs\nVisible Markers: 0"
-})
-EggESP.StatusParagraph = ESPStatusParagraph
-
-local EggPanelLiveStatus = EggPanelSection:Paragraph({
-    Title = "Live Egg Radar & Reset",
-    Desc = "Loading active egg counts and reset timer..."
-})
-
-EggPanel.UpdateCallback = function(eggList, resetTime)
-    pcall(function()
-        local totalAvailable = 0
-        local topEgg = "None"
-        local topLuck = 0
-        for _, egg in ipairs(eggList) do
-            totalAvailable = totalAvailable + egg.Count
-            if egg.Luck > topLuck then
-                topLuck = egg.Luck
-                topEgg = egg.Name .. " (" .. formatValueString(egg.Luck) .. " Luck)"
+ShopsSection:Button({
+    Title = "Open Food Shop",
+    Desc = "Opens the in-game Food Shop interface to purchase pet food (Grass, Bone, Meat, etc.)",
+    Callback = function()
+        pcall(function()
+            local shop = LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main:FindFirstChild("Shop")
+            if shop then
+                shop.Visible = true
+                if shop:FindFirstChild("Holders") then
+                    if shop.Holders:FindFirstChild("Food") then shop.Holders.Food.Visible = true end
+                    if shop.Holders:FindFirstChild("Gears") then shop.Holders.Gears.Visible = false end
+                end
+                if shop:FindFirstChild("Header") and shop.Header:FindFirstChild("Title") then
+                    shop.Header.Title.Text = "Food Shop"
+                end
             end
-        end
+            local prompt = workspace:FindFirstChild("Stalls") and workspace.Stalls:FindFirstChild("Food") and workspace.Stalls.Food:FindFirstChild("Tim") and workspace.Stalls.Food.Tim:FindFirstChild("HumanoidRootPart") and workspace.Stalls.Food.Tim.HumanoidRootPart:FindFirstChildOfClass("ProximityPrompt")
+            if prompt then fireproximityprompt(prompt) end
+        end)
+        WindUI:Notify({
+            Title = "Food Shop Opened",
+            Content = "Food Shop menu is now active.",
+            Duration = 2,
+            Icon = "utensils"
+        })
+    end
+})
 
-        EggPanelLiveStatus:SetDesc(string.format(
-            "Next Reset: %s\nTotal Eggs on Map: %d\nUnique Egg Types: %d\nHighest Tier Egg: %s",
-            resetTime,
-            totalAvailable,
-            #eggList,
-            topEgg
-        ))
-    end)
-end
+local UtilsAutoSection = UtilitiesTab:Section({
+    Title = "Automation",
+    Opened = true
+})
+
+UtilsAutoSection:Toggle({
+    Title = "Auto Collect Index",
+    Desc = "Continuously and automatically claims available Index pet discovery rewards",
+    Value = false,
+    Callback = function(state)
+        UtilitiesConfig.AutoIndex = state
+        WindUI:Notify({
+            Title = "Auto Collect Index",
+            Content = state and "Auto claiming index rewards enabled!" or "Auto collect index disabled.",
+            Duration = 2,
+            Icon = state and "check" or "x"
+        })
+    end
+})
+
+UtilsAutoSection:Toggle({
+    Title = "Auto Rebirth",
+    Desc = "Automatically triggers Rebirth as soon as requirements (cash & pet) are met",
+    Value = false,
+    Callback = function(state)
+        UtilitiesConfig.AutoRebirth = state
+        WindUI:Notify({
+            Title = "Auto Rebirth",
+            Content = state and "Auto rebirth enabled!" or "Auto rebirth disabled.",
+            Duration = 2,
+            Icon = state and "check" or "x"
+        })
+    end
+})
+
+UtilsAutoSection:Toggle({
+    Title = "Auto Upgrade Hatch Luck",
+    Desc = "Automatically purchases Hatch Luck upgrades on your plot whenever affordable",
+    Value = false,
+    Callback = function(state)
+        UtilitiesConfig.AutoHatchLuck = state
+        WindUI:Notify({
+            Title = "Auto Upgrade Hatch Luck",
+            Content = state and "Auto upgrading hatch luck enabled!" or "Auto upgrade hatch luck disabled.",
+            Duration = 2,
+            Icon = state and "check" or "x"
+        })
+    end
+})
+
+-- Background runner for Utilities automation
+task.spawn(function()
+    while true do
+        if UtilitiesConfig.AutoIndex then
+            pcall(function()
+                local rep = game:GetService("ReplicatedStorage")
+                local remote = rep:FindFirstChild("Remotes") and rep.Remotes:FindFirstChild("Game") and rep.Remotes.Game:FindFirstChild("ClaimIndexReward")
+                if remote then remote:FireServer() end
+                local claimBtn = LocalPlayer.PlayerGui:FindFirstChild("Main")
+                    and LocalPlayer.PlayerGui.Main:FindFirstChild("Index")
+                    and LocalPlayer.PlayerGui.Main.Index:FindFirstChild("PetProgress")
+                    and LocalPlayer.PlayerGui.Main.Index.PetProgress:FindFirstChild("Claim")
+                if claimBtn and claimBtn:IsA("GuiButton") and claimBtn.Visible then
+                    if firesignal then firesignal(claimBtn.Activated) end
+                end
+            end)
+        end
+        if UtilitiesConfig.AutoRebirth then
+            pcall(function()
+                local rep = game:GetService("ReplicatedStorage")
+                local remote = rep:FindFirstChild("Remotes") and rep.Remotes:FindFirstChild("Game") and rep.Remotes.Game:FindFirstChild("Rebirth")
+                if remote then remote:FireServer() end
+                local rebirthBtn = LocalPlayer.PlayerGui:FindFirstChild("Main")
+                    and LocalPlayer.PlayerGui.Main:FindFirstChild("Rebirth")
+                    and LocalPlayer.PlayerGui.Main.Rebirth:FindFirstChild("Rebirth")
+                if rebirthBtn and rebirthBtn:IsA("GuiButton") and rebirthBtn.Visible then
+                    if firesignal then firesignal(rebirthBtn.Activated) end
+                end
+            end)
+        end
+        if UtilitiesConfig.AutoHatchLuck then
+            pcall(function()
+                local pgui = LocalPlayer:FindFirstChild("PlayerGui")
+                if pgui then
+                    local maxUp = pgui:FindFirstChild("MaxUpgradeInput") or pgui:FindFirstChild("MaxUpgrade")
+                    local maxBtn = maxUp and maxUp:FindFirstChild("Purchase")
+                    if maxBtn and maxBtn:IsA("GuiButton") then
+                        if firesignal then
+                            firesignal(maxBtn.Activated)
+                        else
+                            local conns = getconnections and getconnections(maxBtn.Activated) or {}
+                            for _, c in ipairs(conns) do pcall(c.Function) end
+                        end
+                    end
+                    local up = pgui:FindFirstChild("UpgradeInput") or pgui:FindFirstChild("Upgrade")
+                    local upBtn = up and up:FindFirstChild("Purchase")
+                    if upBtn and upBtn:IsA("GuiButton") then
+                        if firesignal then
+                            firesignal(upBtn.Activated)
+                        else
+                            local conns = getconnections and getconnections(upBtn.Activated) or {}
+                            for _, c in ipairs(conns) do pcall(c.Function) end
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(1.5)
+    end
+end)
 
 --------------------------------------------------------------------------------
--- TAB 4: WEBHOOK NOTIFICATIONS
+-- TAB 5: WEBHOOK NOTIFICATIONS
 --------------------------------------------------------------------------------
 local WebhookTab = Window:Tab({
     Title = "Webhook",
@@ -2423,7 +2528,7 @@ WebhookTriggersSection:Paragraph({
 })
 
 --------------------------------------------------------------------------------
--- TAB 4: SETTINGS & HUD CUSTOMIZATION
+-- TAB 6: SETTINGS & HUD CUSTOMIZATION
 --------------------------------------------------------------------------------
 local SettingsTab = Window:Tab({
     Title = "Settings",
@@ -2459,25 +2564,6 @@ AppearanceSection:Button({
     end
 })
 
-AppearanceSection:Button({
-    Title = "Toggle Acrylic Blur",
-    Desc = "Toggles background glassmorphism blur effect",
-    Callback = function()
-        pcall(function()
-            WindUI:ToggleAcrylic(not WindUI:GetTransparency())
-        end)
-    end
-})
-
-local InfoSection = SettingsTab:Section({
-    Title = "About Frost Hub",
-    Opened = true
-})
-
-InfoSection:Paragraph({
-    Title = "Frost Hub v2.4 - Egg Panel & Live Radar Suite",
-    Desc = "Built with WindUI for ultra-smooth responsiveness.\nPress RightShift or RightControl to toggle the window."
-})
 
 -- Global Keybind to toggle HUD
 UserInputService.InputBegan:Connect(function(input, processed)
@@ -2497,8 +2583,14 @@ end)
 if getgenv then
     getgenv().FrostHubEggPanel = EggPanel
     getgenv().FrostHubEggESP = EggESP
+    getgenv().FrostHubUtilitiesConfig = UtilitiesConfig
     getgenv().FrostHubCleanup = function()
         pcall(function()
+            if UtilitiesConfig then
+                UtilitiesConfig.AutoIndex = false
+                UtilitiesConfig.AutoRebirth = false
+                UtilitiesConfig.AutoHatchLuck = false
+            end
             if EggESP then EggESP:Destroy() end
             if EggPanel and EggPanel.Gui then EggPanel.Gui:Destroy() end
             if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
