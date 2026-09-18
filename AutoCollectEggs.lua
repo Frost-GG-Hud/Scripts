@@ -2862,6 +2862,100 @@ local function getPlayerCash()
     return 0
 end
 
+local function canPlayerRebirth()
+    local rep = game:GetService("ReplicatedStorage")
+    local gd = rep:FindFirstChild("GameData")
+    if not gd then return false end
+
+    local rebirthsMod = gd:FindFirstChild("Rebirths")
+    local generalMod = gd:FindFirstChild("General")
+    if not rebirthsMod or not generalMod then return false end
+
+    local success1, rebirthsData = pcall(require, rebirthsMod)
+    local success2, generalData = pcall(require, generalMod)
+    if not success1 or not success2 or type(rebirthsData) ~= "table" or type(generalData) ~= "table" then
+        return false
+    end
+
+    local sd = LocalPlayer:FindFirstChild("SavedData")
+    local currentRebirths = 0
+    if sd and sd:FindFirstChild("Rebirths") and typeof(sd.Rebirths.Value) == "number" then
+        currentRebirths = sd.Rebirths.Value
+    end
+
+    local cap = rebirthsData.Cap or 6
+    if currentRebirths >= cap then
+        return false -- Max rebirths reached
+    end
+
+    local nextIndex = currentRebirths + 1
+
+    -- 1. Cost requirement check
+    local cost = nil
+    if rebirthsData.RiggedCost and type(rebirthsData.RiggedCost) == "table" then
+        cost = rebirthsData.RiggedCost[nextIndex]
+    end
+    if not cost and type(rebirthsData.GetCost) == "function" then
+        pcall(function()
+            cost = rebirthsData.GetCost(nextIndex)
+        end)
+    end
+    if not cost then
+        local init = rebirthsData.InitialCost or 1000000
+        local mult = rebirthsData.CostMultiplier or 50
+        cost = init * (mult ^ (nextIndex - 1))
+    end
+
+    local cash = getPlayerCash()
+    if cash < (cost or math.huge) then
+        return false -- Insufficient cash
+    end
+
+    -- 2. Pet requirement check
+    local requiredPet = nil
+    if generalData.RebirthRequirements and type(generalData.RebirthRequirements) == "table" then
+        requiredPet = generalData.RebirthRequirements[nextIndex]
+    end
+
+    if requiredPet and requiredPet ~= "" then
+        local ownedPetsStr = ""
+        if sd and sd:FindFirstChild("OwnedPets") then
+            ownedPetsStr = tostring(sd.OwnedPets.Value or "")
+        end
+
+        local hasPet = false
+        -- Check exact comma-delimited match (e.g. ",Fox,")
+        if string.find("," .. ownedPetsStr .. ",", "," .. requiredPet .. ",") then
+            hasPet = true
+        else
+            -- Case-insensitive match across individual pet tokens
+            local lowerReq = string.lower(string.gsub(requiredPet, "%s+", ""))
+            for pet in string.gmatch(string.lower(ownedPetsStr), "([^,]+)") do
+                if string.gsub(pet, "%s+", "") == lowerReq then
+                    hasPet = true
+                    break
+                end
+            end
+        end
+
+        -- Check equipped / character pets
+        if not hasPet then
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild(requiredPet) then
+                hasPet = true
+            end
+        end
+
+        if not hasPet then
+            return false -- Missing required pet
+        end
+    end
+
+    return true
+end
+
+local lastRebirthAttempt = 0
+
 local function getHatchLuckUpgradeDetails()
     local plot = getPlayerPlot() or (workspace:FindFirstChild("Plots") and workspace.Plots:FindFirstChild("Plot"))
     local pgui = LocalPlayer:FindFirstChild("PlayerGui")
@@ -2943,6 +3037,13 @@ task.spawn(function()
         end
         if UtilitiesConfig.AutoRebirth then
             pcall(function()
+                local now = os.clock()
+                if now - lastRebirthAttempt < 3 then return end
+
+                -- Strictly verify all requirements (cash & pet) before attempting rebirth
+                if not canPlayerRebirth() then return end
+
+                lastRebirthAttempt = now
                 local rep = game:GetService("ReplicatedStorage")
                 local remote = rep:FindFirstChild("Remotes") and rep.Remotes:FindFirstChild("Game") and rep.Remotes.Game:FindFirstChild("Rebirth")
                 if remote then remote:FireServer() end
