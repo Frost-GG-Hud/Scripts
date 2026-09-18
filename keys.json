@@ -7,7 +7,10 @@
       "duration": "7 Days",
       "created_by": "1550562639829274697",
       "created_by_name": "FrostHubAdmin",
-      "status": "Active"
+      "status": "Revoked",
+      "revoked_at": 1789763791,
+      "revoked_by": 1303832901540122656,
+      "revoked_by_name": "cupidat"
     },
     {
       "key": "FROST-EF4C-9XZE-5LW5",
