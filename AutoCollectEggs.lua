@@ -838,6 +838,16 @@ local function getActiveEggData()
     return list
 end
 
+local function setUIFont(obj, weight)
+    weight = weight or Enum.FontWeight.Medium
+    pcall(function()
+        obj.FontFace = Font.new("rbxassetid://12187365364", weight, Enum.FontStyle.Normal)
+    end)
+    if not obj.FontFace or tostring(obj.FontFace.Family) == "" then
+        obj.Font = (weight == Enum.FontWeight.Bold or weight == Enum.FontWeight.SemiBold) and Enum.Font.GothamBold or Enum.Font.GothamMedium
+    end
+end
+
 local EggPanel = {
     Gui = nil,
     MainFrame = nil,
@@ -871,64 +881,115 @@ function EggPanel:Init()
 
     local main = Instance.new("Frame")
     main.Name = "MainFrame"
-    main.Size = UDim2.new(0, 360, 0, 520)
-    main.Position = UDim2.new(0.5, 40, 0.5, -260)
-    main.BackgroundColor3 = Color3.fromRGB(11, 20, 16)
+    main.Size = UDim2.new(0, 420, 0, 540)
+    main.Position = UDim2.new(0.5, 60, 0.5, -270)
+    main.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+    main.BackgroundTransparency = 0.04
     main.BorderSizePixel = 0
     main.ClipsDescendants = true
     main.Parent = gui
     self.MainFrame = main
 
     local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 10)
+    mainCorner.CornerRadius = UDim.new(0, 16)
     mainCorner.Parent = main
 
     local mainStroke = Instance.new("UIStroke")
-    mainStroke.Color = Color3.fromRGB(28, 55, 42)
-    mainStroke.Thickness = 1.4
-    mainStroke.Transparency = 0.25
+    mainStroke.Color = Color3.fromRGB(255, 255, 255)
+    mainStroke.Transparency = 0.92
+    mainStroke.Thickness = 1
     mainStroke.Parent = main
 
-    -- 1. Top Bar (Draggable)
+    -- Background texture matching WindUI
+    local bgImg = Instance.new("ImageLabel")
+    bgImg.Name = "Background"
+    bgImg.Size = UDim2.new(1, 0, 1, 0)
+    bgImg.BackgroundTransparency = 1
+    bgImg.Image = "rbxassetid://89641024074289"
+    bgImg.ImageColor3 = Color3.fromRGB(16, 16, 16)
+    bgImg.ImageTransparency = 0.15
+    bgImg.BorderSizePixel = 0
+    bgImg.Parent = main
+
+    -- 1. Top Bar (Draggable, matching WindUI topbar layout & height)
     local topBar = Instance.new("Frame")
-    topBar.Name = "TopBar"
-    topBar.Size = UDim2.new(1, 0, 0, 38)
-    topBar.BackgroundColor3 = Color3.fromRGB(8, 15, 12)
+    topBar.Name = "Topbar"
+    topBar.Size = UDim2.new(1, 0, 0, 52)
+    topBar.BackgroundTransparency = 1
     topBar.BorderSizePixel = 0
     topBar.Parent = main
 
-    local topIcon = Instance.new("TextLabel")
-    topIcon.Text = "❄️"
-    topIcon.Size = UDim2.new(0, 24, 1, 0)
-    topIcon.Position = UDim2.new(0, 10, 0, 0)
+    local topIcon = Instance.new("ImageLabel")
+    topIcon.Name = "TopIcon"
+    topIcon.Size = UDim2.new(0, 22, 0, 22)
+    topIcon.Position = UDim2.new(0, 14, 0.5, -11)
     topIcon.BackgroundTransparency = 1
-    topIcon.TextSize = 14
+    topIcon.Image = "rbxassetid://117851493400222"
+    topIcon.ImageColor3 = Color3.fromRGB(161, 161, 170)
     topIcon.Parent = topBar
 
     local topTitle = Instance.new("TextLabel")
-    topTitle.Text = "FROST HUB | EGG PANEL"
-    topTitle.Size = UDim2.new(1, -75, 1, 0)
-    topTitle.Position = UDim2.new(0, 34, 0, 0)
+    topTitle.Name = "Title"
+    topTitle.Text = "Frost Hub | Egg Panel"
+    topTitle.Size = UDim2.new(1, -110, 0, 20)
+    topTitle.Position = UDim2.new(0, 44, 0, 8)
     topTitle.BackgroundTransparency = 1
-    topTitle.TextColor3 = Color3.fromRGB(220, 245, 235)
-    topTitle.Font = Enum.Font.GothamBold
-    topTitle.TextSize = 12
+    topTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    topTitle.TextSize = 16
     topTitle.TextXAlignment = Enum.TextXAlignment.Left
+    setUIFont(topTitle, Enum.FontWeight.SemiBold)
     topTitle.Parent = topBar
 
-    local closeBtn = Instance.new("TextButton")
-    closeBtn.Text = "✕"
-    closeBtn.Size = UDim2.new(0, 24, 0, 24)
-    closeBtn.Position = UDim2.new(1, -30, 0.5, -12)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(18, 30, 24)
-    closeBtn.TextColor3 = Color3.fromRGB(180, 200, 190)
-    closeBtn.Font = Enum.Font.GothamBold
-    closeBtn.TextSize = 11
+    local topSub = Instance.new("TextLabel")
+    topSub.Name = "Author"
+    topSub.Text = "Live Radar & Reset Tracker"
+    topSub.Size = UDim2.new(1, -110, 0, 16)
+    topSub.Position = UDim2.new(0, 44, 0, 28)
+    topSub.BackgroundTransparency = 1
+    topSub.TextColor3 = Color3.fromRGB(161, 161, 170)
+    topSub.TextSize = 13
+    topSub.TextXAlignment = Enum.TextXAlignment.Left
+    setUIFont(topSub, Enum.FontWeight.Medium)
+    topSub.Parent = topBar
+
+    local topDivider = Instance.new("Frame")
+    topDivider.Name = "Divider"
+    topDivider.Size = UDim2.new(1, 0, 0, 1)
+    topDivider.Position = UDim2.new(0, 0, 0, 52)
+    topDivider.BackgroundColor3 = Color3.fromRGB(34, 34, 38)
+    topDivider.BorderSizePixel = 0
+    topDivider.Parent = main
+
+    -- Close button matching WindUI window controls
+    local closeBtn = Instance.new("ImageButton")
+    closeBtn.Name = "CloseButton"
+    closeBtn.Size = UDim2.new(0, 36, 0, 36)
+    closeBtn.Position = UDim2.new(1, -48, 0.5, -18)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.BackgroundTransparency = 1
     closeBtn.Parent = topBar
+
     local closeCorner = Instance.new("UICorner")
-    closeCorner.CornerRadius = UDim.new(0, 6)
+    closeCorner.CornerRadius = UDim.new(0, 8)
     closeCorner.Parent = closeBtn
 
+    local closeIcon = Instance.new("ImageLabel")
+    closeIcon.Name = "CloseIcon"
+    closeIcon.Size = UDim2.new(0, 16, 0, 16)
+    closeIcon.Position = UDim2.new(0.5, -8, 0.5, -8)
+    closeIcon.BackgroundTransparency = 1
+    closeIcon.Image = "rbxassetid://110786993356448"
+    closeIcon.ImageColor3 = Color3.fromRGB(161, 161, 170)
+    closeIcon.Parent = closeBtn
+
+    closeBtn.MouseEnter:Connect(function()
+        closeBtn.BackgroundTransparency = 0.88
+        closeIcon.ImageColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+    closeBtn.MouseLeave:Connect(function()
+        closeBtn.BackgroundTransparency = 1
+        closeIcon.ImageColor3 = Color3.fromRGB(161, 161, 170)
+    end)
     closeBtn.MouseButton1Click:Connect(function()
         self:Close()
     end)
@@ -958,23 +1019,56 @@ function EggPanel:Init()
     -- 2. SubBar (Egg Logs button & Reset Countdown)
     local subBar = Instance.new("Frame")
     subBar.Name = "SubBar"
-    subBar.Size = UDim2.new(1, -20, 0, 32)
-    subBar.Position = UDim2.new(0, 10, 0, 44)
+    subBar.Size = UDim2.new(1, -28, 0, 32)
+    subBar.Position = UDim2.new(0, 14, 0, 64)
     subBar.BackgroundTransparency = 1
     subBar.Parent = main
 
     local logsBtn = Instance.new("TextButton")
     logsBtn.Name = "EggLogsButton"
-    logsBtn.Text = "Egg Logs"
-    logsBtn.Size = UDim2.new(0, 90, 1, 0)
-    logsBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
-    logsBtn.TextColor3 = Color3.fromRGB(10, 25, 18)
-    logsBtn.Font = Enum.Font.GothamBold
-    logsBtn.TextSize = 12
+    logsBtn.Text = ""
+    logsBtn.Size = UDim2.new(0, 105, 1, 0)
+    logsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
+    logsBtn.BorderSizePixel = 0
     logsBtn.Parent = subBar
+
     local logsCorner = Instance.new("UICorner")
-    logsCorner.CornerRadius = UDim.new(0, 6)
+    logsCorner.CornerRadius = UDim.new(0, 8)
     logsCorner.Parent = logsBtn
+
+    local logsStroke = Instance.new("UIStroke")
+    logsStroke.Color = Color3.fromRGB(46, 46, 52)
+    logsStroke.Thickness = 1
+    logsStroke.Parent = logsBtn
+
+    local logsIcon = Instance.new("ImageLabel")
+    logsIcon.Name = "LogsIcon"
+    logsIcon.Size = UDim2.new(0, 14, 0, 14)
+    logsIcon.Position = UDim2.new(0, 10, 0.5, -7)
+    logsIcon.BackgroundTransparency = 1
+    logsIcon.Image = "rbxassetid://113179976918783"
+    logsIcon.ImageColor3 = Color3.fromRGB(161, 161, 170)
+    logsIcon.Parent = logsBtn
+
+    local logsText = Instance.new("TextLabel")
+    logsText.Name = "LogsText"
+    logsText.Text = "Egg Logs"
+    logsText.Size = UDim2.new(1, -32, 1, 0)
+    logsText.Position = UDim2.new(0, 28, 0, 0)
+    logsText.BackgroundTransparency = 1
+    logsText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    logsText.TextSize = 12.5
+    setUIFont(logsText, Enum.FontWeight.SemiBold)
+    logsText.Parent = logsBtn
+
+    logsBtn.MouseEnter:Connect(function()
+        logsBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 46)
+        logsStroke.Color = Color3.fromRGB(60, 60, 70)
+    end)
+    logsBtn.MouseLeave:Connect(function()
+        logsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
+        logsStroke.Color = Color3.fromRGB(46, 46, 52)
+    end)
 
     logsBtn.MouseButton1Click:Connect(function()
         WindUI:Notify({
@@ -987,60 +1081,87 @@ function EggPanel:Init()
 
     local resetLabel = Instance.new("TextLabel")
     resetLabel.Name = "ResetTimerLabel"
-    resetLabel.Text = "Next Reset: 0m 00s"
-    resetLabel.Size = UDim2.new(1, -100, 1, 0)
-    resetLabel.Position = UDim2.new(0, 100, 0, 0)
+    resetLabel.RichText = true
+    resetLabel.Text = '<font color="rgb(161,161,170)">Next Reset: </font><font color="rgb(255,255,255)"><b>0m 00s</b></font>'
+    resetLabel.Size = UDim2.new(1, -115, 1, 0)
+    resetLabel.Position = UDim2.new(0, 115, 0, 0)
     resetLabel.BackgroundTransparency = 1
-    resetLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
-    resetLabel.Font = Enum.Font.GothamBold
-    resetLabel.TextSize = 12.5
+    resetLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    resetLabel.TextSize = 13
     resetLabel.TextXAlignment = Enum.TextXAlignment.Right
+    setUIFont(resetLabel, Enum.FontWeight.SemiBold)
     resetLabel.Parent = subBar
     self.ResetLabel = resetLabel
 
     -- 3. Search Bar
     local searchFrame = Instance.new("Frame")
     searchFrame.Name = "SearchFrame"
-    searchFrame.Size = UDim2.new(1, -20, 0, 32)
-    searchFrame.Position = UDim2.new(0, 10, 0, 82)
-    searchFrame.BackgroundColor3 = Color3.fromRGB(16, 28, 23)
+    searchFrame.Size = UDim2.new(1, -28, 0, 34)
+    searchFrame.Position = UDim2.new(0, 14, 0, 106)
+    searchFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
     searchFrame.Parent = main
+
     local searchCorner = Instance.new("UICorner")
-    searchCorner.CornerRadius = UDim.new(0, 6)
+    searchCorner.CornerRadius = UDim.new(0, 8)
     searchCorner.Parent = searchFrame
+
     local searchStroke = Instance.new("UIStroke")
-    searchStroke.Color = Color3.fromRGB(30, 55, 42)
+    searchStroke.Color = Color3.fromRGB(40, 40, 46)
     searchStroke.Thickness = 1
     searchStroke.Parent = searchFrame
 
+    local searchIcon = Instance.new("ImageLabel")
+    searchIcon.Name = "SearchIcon"
+    searchIcon.Size = UDim2.new(0, 15, 0, 15)
+    searchIcon.Position = UDim2.new(0, 10, 0.5, -7.5)
+    searchIcon.BackgroundTransparency = 1
+    searchIcon.Image = "rbxassetid://121018724060431"
+    searchIcon.ImageColor3 = Color3.fromRGB(140, 140, 150)
+    searchIcon.Parent = searchFrame
+
     local searchBox = Instance.new("TextBox")
     searchBox.Name = "SearchBox"
-    searchBox.Size = UDim2.new(1, -65, 1, 0)
-    searchBox.Position = UDim2.new(0, 10, 0, 0)
+    searchBox.Size = UDim2.new(1, -88, 1, 0)
+    searchBox.Position = UDim2.new(0, 32, 0, 0)
     searchBox.BackgroundTransparency = 1
     searchBox.PlaceholderText = "Search egg or rarity..."
-    searchBox.PlaceholderColor3 = Color3.fromRGB(110, 140, 125)
-    searchBox.TextColor3 = Color3.fromRGB(240, 250, 245)
-    searchBox.Font = Enum.Font.GothamMedium
-    searchBox.TextSize = 11.5
+    searchBox.PlaceholderColor3 = Color3.fromRGB(140, 140, 150)
+    searchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    searchBox.TextSize = 12.5
     searchBox.TextXAlignment = Enum.TextXAlignment.Left
     searchBox.ClearTextOnFocus = false
+    setUIFont(searchBox, Enum.FontWeight.Medium)
     searchBox.Parent = searchFrame
     self.SearchBox = searchBox
+
+    searchBox.Focused:Connect(function()
+        searchStroke.Color = Color3.fromRGB(0, 145, 255)
+    end)
+    searchBox.FocusLost:Connect(function()
+        searchStroke.Color = Color3.fromRGB(40, 40, 46)
+    end)
 
     local clearBtn = Instance.new("TextButton")
     clearBtn.Name = "ClearButton"
     clearBtn.Text = "Clear"
-    clearBtn.Size = UDim2.new(0, 46, 0, 22)
+    clearBtn.Size = UDim2.new(0, 44, 0, 22)
     clearBtn.Position = UDim2.new(1, -50, 0.5, -11)
-    clearBtn.BackgroundColor3 = Color3.fromRGB(24, 40, 32)
-    clearBtn.TextColor3 = Color3.fromRGB(180, 205, 195)
-    clearBtn.Font = Enum.Font.GothamMedium
-    clearBtn.TextSize = 10.5
+    clearBtn.BackgroundColor3 = Color3.fromRGB(34, 34, 40)
+    clearBtn.TextColor3 = Color3.fromRGB(180, 180, 190)
+    clearBtn.TextSize = 11
+    setUIFont(clearBtn, Enum.FontWeight.Medium)
     clearBtn.Parent = searchFrame
+
     local clearCorner = Instance.new("UICorner")
-    clearCorner.CornerRadius = UDim.new(0, 4)
+    clearCorner.CornerRadius = UDim.new(0, 6)
     clearCorner.Parent = clearBtn
+
+    clearBtn.MouseEnter:Connect(function()
+        clearBtn.BackgroundColor3 = Color3.fromRGB(44, 44, 52)
+    end)
+    clearBtn.MouseLeave:Connect(function()
+        clearBtn.BackgroundColor3 = Color3.fromRGB(34, 34, 40)
+    end)
 
     searchBox:GetPropertyChangedSignal("Text"):Connect(function()
         self.SearchQuery = string.lower(searchBox.Text or "")
@@ -1055,11 +1176,11 @@ function EggPanel:Init()
     -- 4. Filter Pills Bar (Horizontal ScrollingFrame)
     local filterScroll = Instance.new("ScrollingFrame")
     filterScroll.Name = "FilterScroll"
-    filterScroll.Size = UDim2.new(1, -20, 0, 28)
-    filterScroll.Position = UDim2.new(0, 10, 0, 120)
+    filterScroll.Size = UDim2.new(1, -28, 0, 28)
+    filterScroll.Position = UDim2.new(0, 14, 0, 148)
     filterScroll.BackgroundTransparency = 1
     filterScroll.ScrollBarThickness = 0
-    filterScroll.CanvasSize = UDim2.new(0, 480, 0, 0)
+    filterScroll.CanvasSize = UDim2.new(0, 520, 0, 0)
     filterScroll.ScrollingDirection = Enum.ScrollingDirection.X
     filterScroll.Parent = main
 
@@ -1069,40 +1190,62 @@ function EggPanel:Init()
     filterLayout.VerticalAlignment = Enum.VerticalAlignment.Center
     filterLayout.Parent = filterScroll
 
-    local filters = { "Any", "Ethereal", "Divine", "Mythic", "Legendary", "Epic", "Rare", "Common" }
+    local filters = { "Any", "Divine", "Ethereal", "Mythic", "Legendary", "Epic", "Rare", "Common" }
     self.FilterButtons = {}
 
     for _, fName in ipairs(filters) do
         local pill = Instance.new("TextButton")
         pill.Name = "Pill_" .. fName
         pill.Text = fName
-        pill.Size = UDim2.new(0, fName == "Any" and 48 or 62, 0, 24)
-        pill.Font = Enum.Font.GothamBold
-        pill.TextSize = 10.5
+        pill.Size = UDim2.new(0, fName == "Any" and 48 or 64, 0, 26)
+        pill.TextSize = 11
+        pill.BorderSizePixel = 0
         pill.Parent = filterScroll
+
         local pCorner = Instance.new("UICorner")
-        pCorner.CornerRadius = UDim.new(0, 12)
+        pCorner.CornerRadius = UDim.new(0, 8)
         pCorner.Parent = pill
 
-        self.FilterButtons[fName] = pill
+        local pStroke = Instance.new("UIStroke")
+        pStroke.Thickness = 1
+        pStroke.Parent = pill
+
+        self.FilterButtons[fName] = { Button = pill, Stroke = pStroke }
 
         local function updatePillVisual()
             if self.ActiveFilter == fName then
-                pill.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-                pill.TextColor3 = Color3.fromRGB(10, 25, 18)
+                pill.BackgroundColor3 = Color3.fromRGB(0, 145, 255)
+                pStroke.Color = Color3.fromRGB(0, 145, 255)
+                pill.TextColor3 = Color3.fromRGB(255, 255, 255)
+                setUIFont(pill, Enum.FontWeight.SemiBold)
             else
-                pill.BackgroundColor3 = Color3.fromRGB(18, 30, 25)
-                pill.TextColor3 = Color3.fromRGB(180, 200, 190)
+                pill.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+                pStroke.Color = Color3.fromRGB(38, 38, 44)
+                pill.TextColor3 = Color3.fromRGB(161, 161, 170)
+                setUIFont(pill, Enum.FontWeight.Medium)
             end
         end
         updatePillVisual()
 
+        pill.MouseEnter:Connect(function()
+            if self.ActiveFilter ~= fName then
+                pill.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
+            end
+        end)
+        pill.MouseLeave:Connect(function()
+            if self.ActiveFilter ~= fName then
+                pill.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+            end
+        end)
+
         pill.MouseButton1Click:Connect(function()
             self.ActiveFilter = fName
-            for _, btn in pairs(self.FilterButtons) do
-                local isActive = (btn.Name == "Pill_" .. fName)
-                btn.BackgroundColor3 = isActive and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(18, 30, 25)
-                btn.TextColor3 = isActive and Color3.fromRGB(10, 25, 18) or Color3.fromRGB(180, 200, 190)
+            for name, item in pairs(self.FilterButtons) do
+                local isActive = (name == fName)
+                item.Button.BackgroundColor3 = isActive and Color3.fromRGB(0, 145, 255) or Color3.fromRGB(24, 24, 28)
+                item.Stroke.Color = isActive and Color3.fromRGB(0, 145, 255) or Color3.fromRGB(38, 38, 44)
+                item.Button.TextColor3 = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(161, 161, 170)
+                setUIFont(item.Button, isActive and Enum.FontWeight.SemiBold or Enum.FontWeight.Medium)
             end
             self:RenderCards()
         end)
@@ -1111,11 +1254,12 @@ function EggPanel:Init()
     -- 5. Card Container (Vertical ScrollingFrame)
     local cardScroll = Instance.new("ScrollingFrame")
     cardScroll.Name = "CardScroll"
-    cardScroll.Size = UDim2.new(1, -20, 1, -162)
-    cardScroll.Position = UDim2.new(0, 10, 0, 154)
+    cardScroll.Size = UDim2.new(1, -28, 1, -196)
+    cardScroll.Position = UDim2.new(0, 14, 0, 184)
     cardScroll.BackgroundTransparency = 1
-    cardScroll.ScrollBarThickness = 3
-    cardScroll.ScrollBarImageColor3 = Color3.fromRGB(40, 75, 58)
+    cardScroll.ScrollBarThickness = 4
+    cardScroll.ScrollBarImageColor3 = Color3.fromRGB(65, 65, 75)
+    cardScroll.ScrollBarImageTransparency = 0.3
     cardScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     cardScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     cardScroll.Parent = main
@@ -1152,27 +1296,36 @@ function EggPanel:RenderCards()
 
             local card = Instance.new("Frame")
             card.Name = "EggCard_" .. egg.Name
-            card.Size = UDim2.new(1, 0, 0, 56)
-            card.BackgroundColor3 = Color3.fromRGB(15, 26, 21)
+            card.Size = UDim2.new(1, 0, 0, 58)
+            card.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
             card.BorderSizePixel = 0
             card.LayoutOrder = i
             card.Parent = self.CardScroll
 
             local cCorner = Instance.new("UICorner")
-            cCorner.CornerRadius = UDim.new(0, 8)
+            cCorner.CornerRadius = UDim.new(0, 10)
             cCorner.Parent = card
 
             local cStroke = Instance.new("UIStroke")
-            cStroke.Color = Color3.fromRGB(26, 48, 38)
+            cStroke.Color = Color3.fromRGB(38, 38, 44)
             cStroke.Thickness = 1
             cStroke.Parent = card
+
+            card.MouseEnter:Connect(function()
+                card.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+                cStroke.Color = Color3.fromRGB(52, 52, 60)
+            end)
+            card.MouseLeave:Connect(function()
+                card.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+                cStroke.Color = Color3.fromRGB(38, 38, 44)
+            end)
 
             -- Left vertical color accent bar
             local accent = Instance.new("Frame")
             accent.Name = "RarityAccent"
-            accent.Size = UDim2.new(0, 3.5, 1, -12)
-            accent.Position = UDim2.new(0, 4, 0, 6)
-            accent.BackgroundColor3 = RARITY_COLORS[egg.Rarity] or Color3.fromRGB(46, 204, 113)
+            accent.Size = UDim2.new(0, 3.5, 1, -16)
+            accent.Position = UDim2.new(0, 5, 0, 8)
+            accent.BackgroundColor3 = RARITY_COLORS[egg.Rarity] or Color3.fromRGB(0, 145, 255)
             accent.BorderSizePixel = 0
             accent.Parent = card
             local aCorner = Instance.new("UICorner")
@@ -1183,13 +1336,18 @@ function EggPanel:RenderCards()
             local iconHolder = Instance.new("Frame")
             iconHolder.Name = "IconHolder"
             iconHolder.Size = UDim2.new(0, 40, 0, 40)
-            iconHolder.Position = UDim2.new(0, 14, 0.5, -20)
-            iconHolder.BackgroundColor3 = Color3.fromRGB(20, 34, 28)
+            iconHolder.Position = UDim2.new(0, 15, 0.5, -20)
+            iconHolder.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
             iconHolder.BorderSizePixel = 0
             iconHolder.Parent = card
             local iconCorner = Instance.new("UICorner")
-            iconCorner.CornerRadius = UDim.new(0, 6)
+            iconCorner.CornerRadius = UDim.new(0, 8)
             iconCorner.Parent = iconHolder
+
+            local iconStroke = Instance.new("UIStroke")
+            iconStroke.Color = Color3.fromRGB(44, 44, 52)
+            iconStroke.Thickness = 1
+            iconStroke.Parent = iconHolder
 
             if egg.Image and egg.Image ~= "" then
                 local img = Instance.new("ImageLabel")
@@ -1210,47 +1368,62 @@ function EggPanel:RenderCards()
             -- Egg Name & Details
             local nameLabel = Instance.new("TextLabel")
             nameLabel.Text = egg.Name
-            nameLabel.Size = UDim2.new(1, -170, 0, 20)
-            nameLabel.Position = UDim2.new(0, 62, 0, 8)
+            nameLabel.Size = UDim2.new(1, -180, 0, 20)
+            nameLabel.Position = UDim2.new(0, 66, 0, 9)
             nameLabel.BackgroundTransparency = 1
-            nameLabel.TextColor3 = Color3.fromRGB(245, 255, 250)
-            nameLabel.Font = Enum.Font.GothamBold
-            nameLabel.TextSize = 12.5
+            nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            nameLabel.TextSize = 13
             nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            setUIFont(nameLabel, Enum.FontWeight.SemiBold)
             nameLabel.Parent = card
 
             local subLabel = Instance.new("TextLabel")
             subLabel.Text = string.format("%s • x%d In World • %d studs", egg.Rarity, egg.Count, egg.Distance)
-            subLabel.Size = UDim2.new(1, -170, 0, 16)
-            subLabel.Position = UDim2.new(0, 62, 0, 28)
+            subLabel.Size = UDim2.new(1, -180, 0, 16)
+            subLabel.Position = UDim2.new(0, 66, 0, 29)
             subLabel.BackgroundTransparency = 1
-            subLabel.TextColor3 = RARITY_COLORS[egg.Rarity] or Color3.fromRGB(200, 150, 60)
-            subLabel.Font = Enum.Font.GothamMedium
-            subLabel.TextSize = 10
+            subLabel.TextColor3 = Color3.fromRGB(161, 161, 170)
+            subLabel.TextSize = 10.5
             subLabel.TextXAlignment = Enum.TextXAlignment.Left
+            setUIFont(subLabel, Enum.FontWeight.Medium)
             subLabel.Parent = card
 
             -- Right-aligned Luck Value Badge
+            local luckValueBadge = Instance.new("Frame")
+            luckValueBadge.Name = "LuckBadge"
+            luckValueBadge.Size = UDim2.new(0, 100, 0, 20)
+            luckValueBadge.Position = UDim2.new(1, -108, 0, 9)
+            luckValueBadge.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+            luckValueBadge.BorderSizePixel = 0
+            luckValueBadge.Parent = card
+
+            local badgeCorner = Instance.new("UICorner")
+            badgeCorner.CornerRadius = UDim.new(0, 6)
+            badgeCorner.Parent = luckValueBadge
+
+            local badgeStroke = Instance.new("UIStroke")
+            badgeStroke.Color = Color3.fromRGB(48, 48, 58)
+            badgeStroke.Thickness = 1
+            badgeStroke.Parent = luckValueBadge
+
             local luckValueLabel = Instance.new("TextLabel")
             luckValueLabel.Text = formatValueString(egg.Luck) .. " Luck"
-            luckValueLabel.Size = UDim2.new(0, 100, 0, 20)
-            luckValueLabel.Position = UDim2.new(1, -106, 0, 8)
+            luckValueLabel.Size = UDim2.new(1, 0, 1, 0)
             luckValueLabel.BackgroundTransparency = 1
-            luckValueLabel.TextColor3 = Color3.fromRGB(74, 222, 128)
-            luckValueLabel.Font = Enum.Font.GothamBold
-            luckValueLabel.TextSize = 12.5
-            luckValueLabel.TextXAlignment = Enum.TextXAlignment.Right
-            luckValueLabel.Parent = card
+            luckValueLabel.TextColor3 = Color3.fromRGB(56, 189, 248)
+            luckValueLabel.TextSize = 11.5
+            setUIFont(luckValueLabel, Enum.FontWeight.SemiBold)
+            luckValueLabel.Parent = luckValueBadge
 
             local tierLabel = Instance.new("TextLabel")
             tierLabel.Text = "Tier " .. egg.Rarity
             tierLabel.Size = UDim2.new(0, 100, 0, 16)
-            tierLabel.Position = UDim2.new(1, -106, 0, 28)
+            tierLabel.Position = UDim2.new(1, -108, 0, 30)
             tierLabel.BackgroundTransparency = 1
-            tierLabel.TextColor3 = Color3.fromRGB(140, 165, 155)
-            tierLabel.Font = Enum.Font.Gotham
+            tierLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
             tierLabel.TextSize = 9.5
             tierLabel.TextXAlignment = Enum.TextXAlignment.Right
+            setUIFont(tierLabel, Enum.FontWeight.Medium)
             tierLabel.Parent = card
         end
     end
@@ -1260,9 +1433,9 @@ function EggPanel:RenderCards()
         empty.Text = "No eggs matching criteria."
         empty.Size = UDim2.new(1, 0, 0, 40)
         empty.BackgroundTransparency = 1
-        empty.TextColor3 = Color3.fromRGB(120, 150, 135)
-        empty.Font = Enum.Font.GothamMedium
-        empty.TextSize = 11.5
+        empty.TextColor3 = Color3.fromRGB(140, 140, 150)
+        empty.TextSize = 12
+        setUIFont(empty, Enum.FontWeight.Medium)
         empty.Parent = self.CardScroll
     end
 end
@@ -1272,7 +1445,10 @@ function EggPanel:Refresh()
     self.NextResetText = getEggResetTimeText()
 
     if self.ResetLabel then
-        self.ResetLabel.Text = "Next Reset: " .. self.NextResetText
+        self.ResetLabel.Text = string.format(
+            '<font color="rgb(161,161,170)">Next Reset: </font><font color="rgb(255,255,255)"><b>%s</b></font>',
+            self.NextResetText
+        )
     end
 
     if self.IsOpen then
