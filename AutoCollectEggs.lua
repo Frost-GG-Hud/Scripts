@@ -120,8 +120,10 @@ local Config = {
     -- Webhook Configuration
     WebhookEnabled = false,
     WebhookURL = "",
-    OneAlertPerEgg = true,               -- Exactly one notification per egg
-    IncludeFarmerStats = true,           -- Include farmer name, session time, and pace
+    OneAlertPerEgg = true,               -- Strictly one notification per egg (default enabled)
+    IncludeFarmerStats = true,           -- Automatically included by default
+    EggNotifications = true,             -- Send egg stats when egg is collected and deposited
+    WeatherNotifications = true,         -- Send weather event & change notifications
 }
 
 local UtilitiesConfig = {
@@ -251,6 +253,7 @@ end
 -- Dispatches exactly ONE consolidated webhook notification per egg
 local function sendEggFarmedWebhook(target)
     if not Config.WebhookEnabled or Config.WebhookURL == "" then return end
+    if not Config.EggNotifications then return end
     if not target then return end
 
     local elapsed = math.max(0.1, os.clock() - State.StartTime)
@@ -282,6 +285,298 @@ local function sendEggFarmedWebhook(target)
 
     sendDiscordWebhook(embed)
 end
+
+--------------------------------------------------------------------------------
+-- WEATHER MONITOR & NOTIFICATION SUBSYSTEM
+--------------------------------------------------------------------------------
+local WeatherChangedConnection = nil
+local LastWeatherSignature = nil
+
+local WEATHER_METADATA = {
+    Thunder = {
+        DisplayName = "Thunderstorm",
+        Icon = "⚡",
+        Color = 0xf1c40f,
+        Mutation = "Shocked Mutation",
+        DefaultChance = "60%",
+        DefaultDesc = "Grants Shocked Mutation to eggs struck in the map"
+    },
+    Volt = {
+        DisplayName = "Volt Tempest",
+        Icon = "🔋",
+        Color = 0x2ecc71,
+        Mutation = "Volted Mutation",
+        DefaultChance = "30%",
+        DefaultDesc = "Grants Volted Mutation to eggs struck in the map"
+    },
+    Raging = {
+        DisplayName = "Raging Inferno",
+        Icon = "🔥",
+        Color = 0xe67e22,
+        Mutation = "Rage Mutation",
+        DefaultChance = "6%",
+        DefaultDesc = "Grants Rage Mutation to eggs struck in the map"
+    },
+    Dreadful = {
+        DisplayName = "Dreadful Void",
+        Icon = "🌌",
+        Color = 0x8e44ad,
+        Mutation = "Void Mutation",
+        DefaultChance = "3%",
+        DefaultDesc = "Grants Void Mutation to eggs struck in the map"
+    },
+    Eternal = {
+        DisplayName = "Eternal Storm",
+        Icon = "✨",
+        Color = 0xe74c3c,
+        Mutation = "Eternal Mutation",
+        DefaultChance = "1%",
+        DefaultDesc = "Grants Eternal Mutation to eggs struck in the map"
+    },
+    Gigantuar = {
+        DisplayName = "Gigantuar Event",
+        Icon = "🗿",
+        Color = 0x1abc9c,
+        Mutation = "Giant Size",
+        DefaultChance = "Special Event",
+        DefaultDesc = "Eggs struck in the map become giant or colossal"
+    }
+}
+
+pcall(function()
+    local gd = ReplicatedStorage:FindFirstChild("GameData")
+    local wMod = gd and gd:FindFirstChild("Weather")
+    local weatherReq = wMod and require(wMod)
+    if weatherReq and weatherReq.Data then
+        for wName, wVal in pairs(weatherReq.Data) do
+            if WEATHER_METADATA[wName] then
+                if wVal.Description then
+                    WEATHER_METADATA[wName].DefaultDesc = wVal.Description
+                end
+                if wVal.Chance then
+                    WEATHER_METADATA[wName].DefaultChance = tostring(wVal.Chance) .. "%"
+                end
+            else
+                WEATHER_METADATA[wName] = {
+                    DisplayName = tostring(wName),
+                    Icon = "🌪️",
+                    Color = 0x3498db,
+                    Mutation = tostring(wVal.MutationGranted or "Special Mutation"),
+                    DefaultChance = tostring(wVal.Chance or "?") .. "%",
+                    DefaultDesc = tostring(wVal.Description or "Special weather event active")
+                }
+            end
+        end
+    end
+end)
+
+local function getActiveWeathers()
+    local ServerData = ReplicatedStorage:FindFirstChild("ServerData")
+    if not ServerData then return {} end
+    local raw = ServerData:GetAttribute("ActiveWeathers")
+    if not raw or raw == "" or raw == "[]" then return {} end
+
+    local success, list = pcall(function()
+        return HttpService:JSONDecode(raw)
+    end)
+
+    if success and type(list) == "table" then
+        return list
+    end
+    return {}
+end
+
+local function getWeatherSignature(list)
+    if not list or #list == 0 then
+        return "CLEAR"
+    end
+    local parts = {}
+    for _, item in ipairs(list) do
+        table.insert(parts, tostring(item.Type) .. "@" .. tostring(item.EndsAt or 0))
+    end
+    table.sort(parts)
+    return table.concat(parts, "|")
+end
+
+local function sendWeatherWebhook(eventType, currentList)
+    if not Config.WebhookEnabled or Config.WebhookURL == "" then return end
+    if not Config.WeatherNotifications then return end
+
+    currentList = currentList or getActiveWeathers()
+    eventType = eventType or "Current Weather"
+
+    -- Update last known signature
+    LastWeatherSignature = getWeatherSignature(currentList)
+
+    local embed = {
+        footer = { text = "❄️ Frost Hub • Live Weather Radar" },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    }
+
+    if #currentList == 0 then
+        -- Clear skies / No active storms
+        if eventType == "Weather Cleared" or eventType == "Cleared" then
+            embed.title = "☀️ Weather Cleared • Clear Skies"
+            embed.description = "The active storm has dissipated. Map weather has returned to **Clear Skies**."
+        else
+            embed.title = "☀️ Current Weather • Clear Skies"
+            embed.description = "No active weather storms in the server. Standard egg spawns and clear visibility."
+        end
+        embed.color = 0x3498db -- Bright Sky Blue
+        embed.fields = {
+            { name = "🌤️ Condition", value = "Clear Skies (Calm)", inline = true },
+            { name = "🌪️ Active Storms", value = "None (0)", inline = true },
+            { name = "🧬 Egg Mutations", value = "Standard Hatch", inline = true },
+            { name = "👤 Farmer", value = string.format("%s (@%s)", LocalPlayer.DisplayName, LocalPlayer.Name), inline = true },
+            { name = "🗺️ Map", value = "Ride A Pet", inline = true },
+            { name = "⏱️ Server Time", value = os.date("!%H:%M:%S UTC"), inline = true },
+        }
+    else
+        -- One or more active weather storms
+        local primary = currentList[1]
+        local pType = tostring(primary.Type or "Unknown")
+        local meta = WEATHER_METADATA[pType] or {
+            DisplayName = pType,
+            Icon = "🌪️",
+            Color = 0x9b59b6,
+            Mutation = "Special Mutation",
+            DefaultChance = "Unknown",
+            DefaultDesc = "Active weather storm on the map."
+        }
+
+        local stormNames = {}
+        for _, w in ipairs(currentList) do
+            local itemType = tostring(w.Type or "Unknown")
+            local itemMeta = WEATHER_METADATA[itemType]
+            local icon = itemMeta and itemMeta.Icon or "🌪️"
+            table.insert(stormNames, icon .. " " .. itemType)
+        end
+        local stormTitle = table.concat(stormNames, " + ")
+
+        if eventType == "Weather Event Started" or eventType == "Started" then
+            embed.title = string.format("%s Weather Event Started: %s!", meta.Icon, stormTitle)
+            embed.description = string.format("A new storm has begun! Grants **%s** to eggs struck in the map.", meta.Mutation)
+        elseif eventType == "Weather Changed" or eventType == "Changed" then
+            embed.title = string.format("%s Weather Changed: %s!", meta.Icon, stormTitle)
+            embed.description = string.format("Server weather conditions shifted! Now experiencing **%s**.", meta.DisplayName)
+        else
+            embed.title = string.format("%s Current Weather: %s", meta.Icon, stormTitle)
+            embed.description = string.format("Server weather status report: **%s** is currently active.", meta.DisplayName)
+        end
+
+        embed.color = meta.Color
+        embed.fields = {}
+
+        for idx, storm in ipairs(currentList) do
+            local sType = tostring(storm.Type or "Unknown")
+            local sMeta = WEATHER_METADATA[sType] or {
+                DisplayName = sType,
+                Icon = "🌪️",
+                Mutation = "Special Mutation",
+                DefaultChance = "Unknown",
+                DefaultDesc = "Active weather storm."
+            }
+            local endsAt = tonumber(storm.EndsAt)
+            local durationStr = "Indefinite / Unknown"
+            if endsAt and endsAt > 0 then
+                local remaining = math.max(0, endsAt - os.time())
+                durationStr = string.format("<t:%d:R> (%s left)", endsAt, formatElapsedTime(remaining))
+            end
+
+            local prefix = (#currentList > 1) and string.format("[%d] ", idx) or ""
+            table.insert(embed.fields, {
+                name = string.format("%s%s %s Storm", prefix, sMeta.Icon, sMeta.DisplayName),
+                value = sMeta.DefaultDesc,
+                inline = false
+            })
+            table.insert(embed.fields, {
+                name = "🧬 Mutation Granted",
+                value = string.format("**%s**", sMeta.Mutation),
+                inline = true
+            })
+            table.insert(embed.fields, {
+                name = "🎲 Spawn Chance",
+                value = sMeta.DefaultChance,
+                inline = true
+            })
+            table.insert(embed.fields, {
+                name = "⏳ Duration Left",
+                value = durationStr,
+                inline = true
+            })
+        end
+
+        table.insert(embed.fields, {
+            name = "👤 Farmer",
+            value = string.format("%s (@%s)", LocalPlayer.DisplayName, LocalPlayer.Name),
+            inline = true
+        })
+        table.insert(embed.fields, {
+            name = "🗺️ Map",
+            value = "Ride A Pet",
+            inline = true
+        })
+        table.insert(embed.fields, {
+            name = "⏱️ Server Time",
+            value = os.date("!%H:%M:%S UTC"),
+            inline = true
+        })
+    end
+
+    sendDiscordWebhook(embed)
+end
+
+local function handleWeatherChanged()
+    if not Config.WebhookEnabled or not Config.WeatherNotifications or Config.WebhookURL == "" then
+        return
+    end
+
+    local currentList = getActiveWeathers()
+    local newSig = getWeatherSignature(currentList)
+
+    if LastWeatherSignature == nil then
+        LastWeatherSignature = newSig
+        return
+    end
+
+    if newSig == LastWeatherSignature then
+        return
+    end
+
+    local oldSig = LastWeatherSignature
+    LastWeatherSignature = newSig
+
+    local eventType
+    if newSig == "CLEAR" then
+        eventType = "Weather Cleared"
+    elseif oldSig == "CLEAR" then
+        eventType = "Weather Event Started"
+    else
+        eventType = "Weather Changed"
+    end
+
+    sendWeatherWebhook(eventType, currentList)
+end
+
+-- Connect attribute signal and spawn watchdog
+pcall(function()
+    local ServerData = ReplicatedStorage:WaitForChild("ServerData", 5)
+    if ServerData then
+        WeatherChangedConnection = ServerData:GetAttributeChangedSignal("ActiveWeathers"):Connect(function()
+            handleWeatherChanged()
+        end)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if getgenv and getgenv().FrostHubRunId ~= ScriptRunId then break end
+        if Config.WebhookEnabled and Config.WeatherNotifications and Config.WebhookURL ~= "" then
+            pcall(handleWeatherChanged)
+        end
+        task.wait(3)
+    end
+end)
 
 --------------------------------------------------------------------------------
 -- HELPER FUNCTIONS
@@ -2507,10 +2802,15 @@ local WebhookConfigSection = WebhookTab:Section({
 
 WebhookConfigSection:Toggle({
     Title = "Enable Discord Webhook",
-    Desc = "Toggles sending real-time egg farming & hatch alerts to your Discord channel",
+    Desc = "Toggles sending real-time egg farming & weather alerts to your Discord channel",
     Value = false,
     Callback = function(state)
         Config.WebhookEnabled = state
+        if state and Config.WeatherNotifications and Config.WebhookURL ~= "" then
+            task.spawn(function()
+                sendWeatherWebhook("Current Weather")
+            end)
+        end
         WindUI:Notify({
             Title = "Webhook Notifications",
             Content = state and "Webhook alerts enabled!" or "Webhook alerts disabled.",
@@ -2526,7 +2826,13 @@ WebhookConfigSection:Input({
     Value = Config.WebhookURL,
     Placeholder = "https://discord.com/api/webhooks/...",
     Callback = function(text)
+        local wasEmpty = (Config.WebhookURL == "" or Config.WebhookURL == nil)
         Config.WebhookURL = text or ""
+        if wasEmpty and Config.WebhookURL ~= "" and Config.WebhookEnabled and Config.WeatherNotifications then
+            task.spawn(function()
+                sendWeatherWebhook("Current Weather")
+            end)
+        end
     end
 })
 
@@ -2555,6 +2861,8 @@ WebhookConfigSection:Button({
                 { name = "Game", value = "Ride A Pet", inline = true },
                 { name = "Active Speed", value = tostring(Config.Speed) .. " studs/s", inline = true },
                 { name = "Movement Mode", value = Config.MovementMode, inline = true },
+                { name = "Egg Notifications", value = Config.EggNotifications and "Enabled" or "Disabled", inline = true },
+                { name = "Weather Alerts", value = Config.WeatherNotifications and "Enabled" or "Disabled", inline = true },
             },
             footer = { text = "❄️ Frost Hub • Webhook Diagnostics" },
             timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -2571,31 +2879,36 @@ WebhookConfigSection:Button({
 })
 
 local WebhookTriggersSection = WebhookTab:Section({
-    Title = "Egg Notification Policy",
+    Title = "Notification Preferences",
     Opened = true
 })
 
 WebhookTriggersSection:Toggle({
-    Title = "One Alert Per Egg",
-    Desc = "Consolidated notification per egg farmed (includes luck, type, distance, and total count)",
-    Value = true,
+    Title = "Egg Notifications",
+    Desc = "Send egg stats whenever an egg is collected and deposited",
+    Value = Config.EggNotifications,
     Callback = function(state)
-        Config.OneAlertPerEgg = state
+        Config.EggNotifications = state
     end
 })
 
 WebhookTriggersSection:Toggle({
-    Title = "Include Farmer Stats",
-    Desc = "Attach farmer username, elapsed session time, and farming rate (eggs/hr) to embed",
-    Value = true,
+    Title = "Weather Notifications",
+    Desc = "Send notification for each weather event and when weather changes",
+    Value = Config.WeatherNotifications,
     Callback = function(state)
-        Config.IncludeFarmerStats = state
+        Config.WeatherNotifications = state
+        if state and Config.WebhookEnabled and Config.WebhookURL ~= "" then
+            task.spawn(function()
+                sendWeatherWebhook("Current Weather")
+            end)
+        end
     end
 })
 
 WebhookTriggersSection:Paragraph({
-    Title = "Anti-Spam Guarantee",
-    Desc = "Each egg generates strictly ONE notification upon completion, preventing channel spam and duplicate alerts."
+    Title = "Webhook Defaults",
+    Desc = "Single alert per egg and Farmer Statistics are automatically enabled by default to ensure clean, comprehensive tracking."
 })
 
 --------------------------------------------------------------------------------
@@ -2664,6 +2977,10 @@ if getgenv then
             end
             if EggESP then EggESP:Destroy() end
             if EggPanel and EggPanel.Gui then EggPanel.Gui:Destroy() end
+            if WeatherChangedConnection then
+                WeatherChangedConnection:Disconnect()
+                WeatherChangedConnection = nil
+            end
             if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
                 local old = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_EggPanelGui")
                 if old then old:Destroy() end
