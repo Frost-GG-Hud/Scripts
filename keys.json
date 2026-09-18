@@ -144,6 +144,17 @@
       "claimed_by": 1328155529939521688,
       "expired_notified": false,
       "status": "Active"
+    },
+    {
+      "key": "FROST-6H-BGN4-DFXS",
+      "created_at": 1789769587,
+      "expires_at": 1789791187,
+      "duration": "6 hours",
+      "created_by": 1276603237612654696,
+      "created_by_name": "niktsik1",
+      "claimed_by": 1276603237612654696,
+      "expired_notified": false,
+      "status": "Active"
     }
   ]
 }
