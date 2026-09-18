@@ -46,7 +46,8 @@
       "status": "Active",
       "revoked_at": 1789763777,
       "revoked_by": 1303832901540122656,
-      "revoked_by_name": "cupidat"
+      "revoked_by_name": "cupidat",
+      "hwid": "UNRESTRICTED"
     },
     {
       "key": "FROST-Z9BU-MDRW-JQGB",
