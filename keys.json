@@ -53,7 +53,10 @@
       "created_by": 1303832901540122656,
       "created_by_name": "cupidat",
       "claimed_by": 1303832901540122656,
-      "status": "Active"
+      "status": "Revoked",
+      "revoked_at": 1789763671,
+      "revoked_by": 1303832901540122656,
+      "revoked_by_name": "cupidat"
     },
     {
       "key": "FROST-6H-PFZR-T4DM",
