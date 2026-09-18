@@ -34,7 +34,7 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
     - **Open Food Shop**: Directly opens the in-game Food Shop menu to purchase pet food (Grass, Bone, Meat, Magic Apple, Dragonfruit).
   - **Automation**:
     - **Auto Collect Index**: Continuously and automatically claims available Index pet discovery rewards.
-    - **Auto Rebirth**: Automatically triggers Rebirth as soon as cash and pet requirements are satisfied.
+    - **Auto Rebirth**: Automatically checks both Cash and Pet requirements against game data (`Rebirths` and `General.RebirthRequirements`) before triggering Rebirth, completely eliminating notification spam when requirements are unmet.
     - **Auto Upgrade Hatch Luck**: Automatically buys Hatch Luck upgrades on your plot whenever affordable.
 - **⚡ Unified Speed Control (1 to 400)**:
   - Single **Movement Speed** slider that automatically governs both **Walk** (`Humanoid.WalkSpeed`) and **Tween** (studs/s glide) navigation.
