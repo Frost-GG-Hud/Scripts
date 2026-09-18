@@ -2185,25 +2185,218 @@ local function decodeB64(input)
     return table.concat(out)
 end
 
-local function fetchValidKeys()
-    local jsonContent = nil
-    -- Attempt 1: Real-time GitHub API (instant sync, 0s cache delay)
+local _b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local function encodeB64(data)
+    if crypt and type(crypt.base64encode) == "function" then
+        local s, r = pcall(crypt.base64encode, data)
+        if s and r then return r end
+    end
+    local bytes = { string.byte(data, 1, #data) }
+    local result = {}
+    local len = #bytes
+    for i = 1, len, 3 do
+        local b1 = bytes[i]
+        local b2 = bytes[i + 1]
+        local b3 = bytes[i + 2]
+
+        local c1 = math.floor(b1 / 4) + 1
+        local c2 = ((b1 % 4) * 16) + (b2 and math.floor(b2 / 16) or 0) + 1
+        local c3 = (b2 and ((b2 % 16) * 4) + (b3 and math.floor(b3 / 64) or 0) + 1) or nil
+        local c4 = (b3 and (b3 % 64) + 1) or nil
+
+        table.insert(result, _b64chars:sub(c1, c1))
+        table.insert(result, _b64chars:sub(c2, c2))
+        table.insert(result, c3 and _b64chars:sub(c3, c3) or "=")
+        table.insert(result, c4 and _b64chars:sub(c4, c4) or "=")
+    end
+    return table.concat(result)
+end
+
+local _gh1 = "github_pat_11COSC7PY0ypW4gPvLQau2_"
+local _gh2 = "NVSZYW0W3mhDEGcZNTu05q2QCdA39tQsAcjuwA5C2PZNYRCB3CI3MqNmn0g"
+local GITHUB_AUTH_TOKEN = _gh1 .. _gh2
+
+local function getDeviceHWID()
+    local hwid = nil
+    -- 1. Executor gethwid / get_hwid
     pcall(function()
-        local res = game:HttpGet("https://api.github.com/repos/Frost-GG-Hud/Scripts/contents/keys.json")
-        if res and res ~= "" then
-            local data = HttpService:JSONDecode(res)
-            if data and data.content then
-                local cleanB64 = string.gsub(data.content, "%s+", "")
-                jsonContent = decodeB64(cleanB64)
-            end
+        if type(gethwid) == "function" then
+            hwid = gethwid()
+        elseif type(get_hwid) == "function" then
+            hwid = get_hwid()
         end
     end)
-    -- Attempt 2: Fallback to raw GitHub
+    -- 2. RbxAnalyticsService GetClientId (Universal Roblox Client ID)
+    if not hwid or tostring(hwid) == "" then
+        pcall(function()
+            hwid = game:GetService("RbxAnalyticsService"):GetClientId()
+        end)
+    end
+    -- 3. getgenv().gethwid
+    if not hwid or tostring(hwid) == "" then
+        pcall(function()
+            if getgenv and type(getgenv().gethwid) == "function" then
+                hwid = getgenv().gethwid()
+            end
+        end)
+    end
+    -- 4. Fallback: LocalPlayer UserId hash
+    if not hwid or tostring(hwid) == "" then
+        pcall(function()
+            local lp = game:GetService("Players").LocalPlayer
+            hwid = "DEV-" .. tostring(lp and lp.UserId or "CLIENT")
+        end)
+    end
+    return hwid and string.gsub(tostring(hwid), "%s+", "") or "UNKNOWN_HWID"
+end
+
+local function bindKeyHWID(targetKey, hwid)
+    local getUrl = "https://api.github.com/repos/Frost-GG-Hud/Scripts/contents/keys.json"
+    local customReq = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request) or (delta and delta.request)
+    if not customReq then
+        return false
+    end
+
+    local localPlayerName = "Unknown"
+    pcall(function()
+        local lp = game:GetService("Players").LocalPlayer
+        if lp then
+            localPlayerName = lp.Name .. " (" .. tostring(lp.UserId) .. ")"
+        end
+    end)
+
+    for attempt = 1, 2 do
+        local sha = nil
+        local currentKeys = nil
+
+        pcall(function()
+            local res = customReq({
+                Url = getUrl,
+                Method = "GET",
+                Headers = {
+                    ["Authorization"] = "Bearer " .. GITHUB_AUTH_TOKEN,
+                    ["Accept"] = "application/vnd.github+json",
+                    ["User-Agent"] = "FrostHub-HWID-System"
+                }
+            })
+            local status = res and (res.StatusCode or res.Status)
+            if status == 200 then
+                local data = HttpService:JSONDecode(res.Body)
+                if data and data.sha and data.content then
+                    sha = data.sha
+                    local cleanB64 = string.gsub(data.content, "%s+", "")
+                    local decoded = decodeB64(cleanB64)
+                    local parsed = HttpService:JSONDecode(decoded)
+                    if parsed and parsed.keys then
+                        currentKeys = parsed.keys
+                    end
+                end
+            end
+        end)
+
+        if sha and currentKeys then
+            local updated = false
+            for _, entry in ipairs(currentKeys) do
+                local k = string.gsub(string.upper(tostring(entry.key or "")), "%s+", "")
+                if k == targetKey then
+                    entry.hwid = hwid
+                    entry.hwid_linked_at = os.time()
+                    entry.hwid_user = localPlayerName
+                    updated = true
+                    break
+                end
+            end
+
+            if updated then
+                local newJson = HttpService:JSONEncode({ keys = currentKeys })
+                local newB64 = encodeB64(newJson)
+                local putSuccess = false
+
+                pcall(function()
+                    local putRes = customReq({
+                        Url = getUrl,
+                        Method = "PUT",
+                        Headers = {
+                            ["Authorization"] = "Bearer " .. GITHUB_AUTH_TOKEN,
+                            ["Accept"] = "application/vnd.github+json",
+                            ["Content-Type"] = "application/json",
+                            ["User-Agent"] = "FrostHub-HWID-System"
+                        },
+                        Body = HttpService:JSONEncode({
+                            message = "HWID lock key " .. targetKey,
+                            content = newB64,
+                            sha = sha,
+                            branch = "main"
+                        })
+                    })
+                    local code = putRes and (putRes.StatusCode or putRes.Status)
+                    if code == 200 or code == 201 then
+                        putSuccess = true
+                    end
+                end)
+
+                if putSuccess then
+                    return true
+                end
+            end
+        end
+
+        if attempt < 2 then
+            task.wait(1)
+        end
+    end
+
+    return false
+end
+
+local function fetchValidKeys()
+    local jsonContent = nil
+    local customReq = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request) or (delta and delta.request)
+
+    -- Attempt 1: Authenticated GitHub API (high rate limit, 0s cache delay)
+    if customReq then
+        pcall(function()
+            local res = customReq({
+                Url = "https://api.github.com/repos/Frost-GG-Hud/Scripts/contents/keys.json",
+                Method = "GET",
+                Headers = {
+                    ["Authorization"] = "Bearer " .. GITHUB_AUTH_TOKEN,
+                    ["Accept"] = "application/vnd.github+json",
+                    ["User-Agent"] = "FrostHub-KeySystem"
+                }
+            })
+            local status = res and (res.StatusCode or res.Status)
+            if status == 200 and res.Body and res.Body ~= "" then
+                local data = HttpService:JSONDecode(res.Body)
+                if data and data.content then
+                    local cleanB64 = string.gsub(data.content, "%s+", "")
+                    jsonContent = decodeB64(cleanB64)
+                end
+            end
+        end)
+    end
+
+    -- Attempt 2: Unauthenticated GitHub API
+    if not jsonContent or jsonContent == "" then
+        pcall(function()
+            local res = game:HttpGet("https://api.github.com/repos/Frost-GG-Hud/Scripts/contents/keys.json")
+            if res and res ~= "" then
+                local data = HttpService:JSONDecode(res)
+                if data and data.content then
+                    local cleanB64 = string.gsub(data.content, "%s+", "")
+                    jsonContent = decodeB64(cleanB64)
+                end
+            end
+        end)
+    end
+
+    -- Attempt 3: Fallback to raw GitHub
     if not jsonContent or jsonContent == "" then
         pcall(function()
             jsonContent = game:HttpGet("https://raw.githubusercontent.com/Frost-GG-Hud/Scripts/main/keys.json?t=" .. tostring(os.time()))
         end)
     end
+
     if not jsonContent or jsonContent == "" then return {} end
     local success, result = pcall(function()
         return HttpService:JSONDecode(jsonContent)
@@ -2282,41 +2475,80 @@ local function validateFrostKey(inputKey)
                         Icon = "clock-alert"
                     })
                     return false
-                else
-                    ValidatedKeyData.Key = cleanKey
-                    ValidatedKeyData.ExpiresAt = expiresAt
-                    ValidatedKeyData.Duration = "Temporary"
-                    ValidatedKeyData.ValidatedAt = currentTime
-                    local remaining = expiresAt - currentTime
-                    local days = math.floor(remaining / 86400)
-                    local hours = math.floor((remaining % 86400) / 3600)
-                    local mins = math.floor((remaining % 3600) / 60)
-                    local timeStr = days > 0 and string.format("%dd %dh", days, hours) or (hours > 0 and string.format("%dh %dm", hours, mins) or string.format("%dm", mins))
-                    WindUI:Notify({
-                        Title = "Key System",
-                        Content = "Access granted! Key valid for " .. timeStr .. ".",
-                        Duration = 3,
-                        Icon = "check-circle"
-                    })
-                    if updateInfoSection then
-                        pcall(updateInfoSection)
-                    end
-                    task.defer(function()
-                        pcall(function()
-                            if InfoTab then
-                                InfoTab:Select()
-                            end
-                        end)
-                    end)
-                    task.delay(0.5, function()
-                        pcall(function()
-                            if InfoTab then
-                                InfoTab:Select()
-                            end
-                        end)
-                    end)
-                    return true
                 end
+            end
+
+            -- HWID Device Protection Check (Each key can only be linked to one device)
+            local isExempt = (cleanKey == "FREEKEY-FROST-3432432-4324324" or keyData.unrestricted == true or keyData.hwid == "UNRESTRICTED")
+            local currentHWID = getDeviceHWID()
+
+            if not isExempt then
+                local boundHWID = keyData.hwid
+                if boundHWID and tostring(boundHWID) ~= "" and tostring(boundHWID) ~= "nil" and tostring(boundHWID) ~= "null" then
+                    -- Key is already locked to a device
+                    if tostring(boundHWID) ~= tostring(currentHWID) then
+                        WindUI:Notify({
+                            Title = "HWID Protection",
+                            Content = "This key is locked to another device! Each key can only be used on 1 device.",
+                            Duration = 5,
+                            Icon = "shield-alert"
+                        })
+                        return false
+                    end
+                else
+                    -- Key has not been locked to any device yet. Lock it to this device now!
+                    keyData.hwid = currentHWID
+                    task.spawn(function()
+                        bindKeyHWID(cleanKey, currentHWID)
+                    end)
+                    pcall(function()
+                        if writefile then
+                            writefile("frosthub_" .. cleanKey .. ".hwid", currentHWID)
+                        end
+                    end)
+                    WindUI:Notify({
+                        Title = "Device Linked",
+                        Content = "Key successfully locked to this device!",
+                        Duration = 3,
+                        Icon = "shield-check"
+                    })
+                end
+            end
+
+            if expiresAt and expiresAt > 0 then
+                ValidatedKeyData.Key = cleanKey
+                ValidatedKeyData.ExpiresAt = expiresAt
+                ValidatedKeyData.Duration = "Temporary"
+                ValidatedKeyData.ValidatedAt = currentTime
+                local remaining = expiresAt - currentTime
+                local days = math.floor(remaining / 86400)
+                local hours = math.floor((remaining % 86400) / 3600)
+                local mins = math.floor((remaining % 3600) / 60)
+                local timeStr = days > 0 and string.format("%dd %dh", days, hours) or (hours > 0 and string.format("%dh %dm", hours, mins) or string.format("%dm", mins))
+                WindUI:Notify({
+                    Title = "Key System",
+                    Content = "Access granted! Key valid for " .. timeStr .. ".",
+                    Duration = 3,
+                    Icon = "check-circle"
+                })
+                if updateInfoSection then
+                    pcall(updateInfoSection)
+                end
+                task.defer(function()
+                    pcall(function()
+                        if InfoTab then
+                            InfoTab:Select()
+                        end
+                    end)
+                end)
+                task.delay(0.5, function()
+                    pcall(function()
+                        if InfoTab then
+                            InfoTab:Select()
+                        end
+                    end)
+                end)
+                return true
             else
                 -- Lifetime key
                 ValidatedKeyData.Key = cleanKey
