@@ -105,6 +105,7 @@ local Config = {
     CarriedWaitTimeout = 5.0,
     DepositWaitTimeout = 10.0,
     ScanRetryDelay = 1.5,
+    EggRegisterWait = 1.5,               -- Wait 1-2s at egg after teleporting before collecting
     -- Egg Luck Filtering
     CollectByLuck = false,
     CollectByValue = false,              -- Backwards-compatible alias
@@ -879,7 +880,9 @@ local function runCollectionLoop()
 
         -- 3. Teleport player directly to assigned egg
         teleportTo(target.Part.Position)
-        task.wait(0.12)
+        State.CurrentStatus = string.format("Arrived at %s, registering...", target.Name)
+        updateStatusUI()
+        task.wait(Config.EggRegisterWait or 1.5)
         if not State.Enabled then break end
 
         if not target.Model.Parent or not target.Prompt.Parent or not target.Prompt.Enabled then
