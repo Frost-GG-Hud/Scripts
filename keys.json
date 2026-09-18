@@ -75,7 +75,10 @@
       "created_by_name": "remarkable_kiwi_62025",
       "claimed_by": 1475620425827614781,
       "expired_notified": false,
-      "status": "Active"
+      "status": "Revoked",
+      "revoked_at": 1789763655,
+      "revoked_by": 1303832901540122656,
+      "revoked_by_name": "cupidat"
     },
     {
       "key": "FROST-6H-99PC-A9T3",
