@@ -92,8 +92,8 @@ end
 -- CONFIGURATION
 --------------------------------------------------------------------------------
 local Config = {
-    MovementMode = "Tween",              -- Standard and only movement mode for Auto Collect Eggs
-    Speed = 60,                          -- Movement speed for Tween (0 to 375)
+    MovementMode = "Teleport & Tween Return", -- Teleport to egg, collect, tween back to base
+    Speed = 60,                          -- Movement speed for return Tween (0 to 350)
     NoclipOnTween = true,
     AgentRadius = 2.0,
     AgentHeight = 5.0,
@@ -682,27 +682,40 @@ local function getCarriedCount()
 end
 
 --------------------------------------------------------------------------------
--- STANDARD TWEEN MOVEMENT SYSTEM
+-- MOVEMENT SYSTEMS (TELEPORT TO EGG & TWEEN RETURN TO BASE)
 --------------------------------------------------------------------------------
+local function teleportTo(targetPos)
+    local hrp = getHRP()
+    local char = getCharacter()
+    if not hrp then return false end
+
+    if State.ActiveTween then
+        pcall(function()
+            State.ActiveTween:Cancel()
+        end)
+        State.ActiveTween = nil
+    end
+
+    local adjustedTarget = targetPos + Vector3.new(0, 2.5, 0)
+    pcall(function()
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        hrp.CFrame = CFrame.new(adjustedTarget)
+        if char then
+            char:PivotTo(CFrame.new(adjustedTarget))
+        end
+    end)
+    return true
+end
+
 local function moveToPoint(targetPos)
     local hrp = getHRP()
     local hum = getHumanoid()
     if not hrp or not hum then return false end
 
-    local currentSpeed = math.clamp(tonumber(Config.Speed) or 60, 0, 375)
-    if currentSpeed <= 0 then
-        while State.Enabled and (tonumber(Config.Speed) or 0) <= 0 do
-            task.wait(0.1)
-        end
-        if not State.Enabled then return false end
-        currentSpeed = math.clamp(tonumber(Config.Speed) or 60, 0, 375)
-    end
-
     local adjustedTarget = targetPos + Vector3.new(0, 2.5, 0)
     local distance = (hrp.Position - adjustedTarget).Magnitude
     if distance <= Config.MaxInteractDistance then return true end
-
-    local duration = math.clamp(distance / currentSpeed, 0.05, 45)
 
     -- Track current destination for instant speed adjustments
     State.CurrentTargetPos = targetPos
@@ -722,30 +735,62 @@ local function moveToPoint(targetPos)
         end)
     end
 
-    local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
-        CFrame = CFrame.new(adjustedTarget)
-    })
-    State.ActiveTween = tween
-    tween:Play()
+    while State.Enabled do
+        local currentSpeed = math.clamp(tonumber(Config.Speed) or 60, 0, 350)
+        if currentSpeed <= 0 then
+            while State.Enabled and (tonumber(Config.Speed) or 0) <= 0 do
+                task.wait(0.1)
+            end
+            if not State.Enabled then break end
+            currentSpeed = math.clamp(tonumber(Config.Speed) or 60, 0, 350)
+        end
 
-    local completed = false
-    local conn = tween.Completed:Connect(function()
-        completed = true
-    end)
+        local currentDist = (hrp.Position - adjustedTarget).Magnitude
+        if currentDist <= Config.MaxInteractDistance then break end
 
-    while State.Enabled and not completed do
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        task.wait(0.04)
+        local duration = math.clamp(currentDist / currentSpeed, 0.05, 45)
+        local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+            CFrame = CFrame.new(adjustedTarget)
+        })
+        State.ActiveTween = tween
+        tween:Play()
+
+        local speedChanged = false
+        local lastSpeed = currentSpeed
+        local playbackState = nil
+
+        local conn = tween.Completed:Connect(function(playback)
+            playbackState = playback or Enum.PlaybackState.Completed
+        end)
+
+        while State.Enabled and not playbackState do
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            local checkSpeed = math.clamp(tonumber(Config.Speed) or 60, 0, 350)
+            if checkSpeed ~= lastSpeed then
+                speedChanged = true
+                break
+            end
+            task.wait(0.04)
+        end
+
+        if conn then conn:Disconnect() end
+        if State.ActiveTween then
+            State.ActiveTween:Cancel()
+            State.ActiveTween = nil
+        end
+
+        if not speedChanged then
+            break
+        end
     end
 
-    if conn then conn:Disconnect() end
     if noclipConn then noclipConn:Disconnect() end
     if State.ActiveTween then
         State.ActiveTween:Cancel()
         State.ActiveTween = nil
     end
     State.CurrentTargetPos = nil
-    return (hrp.Position - targetPos).Magnitude <= (Config.MaxInteractDistance + 3)
+    return (hrp.Position - targetPos).Magnitude <= (Config.MaxInteractDistance + 4)
 end
 
 --------------------------------------------------------------------------------
@@ -796,7 +841,7 @@ local function runCollectionLoop()
                 State.EggsCollected = State.EggsCollected + 1
                 State.CurrentStatus = "Deposited Successfully!"
                 updateStatusUI()
-                task.wait(0.4)
+                task.wait(1.0)
             end
         end
 
@@ -829,11 +874,12 @@ local function runCollectionLoop()
         State.TargetEggName = target.Name
         State.TargetEggLuck = target.Luck
         State.TargetEggValue = target.Luck
-        State.CurrentStatus = string.format("Moving to %s [Luck: %s] (%.0f studs)", target.Name, formatValueString(target.Luck), target.Distance)
+        State.CurrentStatus = string.format("Teleporting to %s [Luck: %s]...", target.Name, formatValueString(target.Luck))
         updateStatusUI()
 
-        -- 3. Move player to target
-        local arrived = moveToPoint(target.Part.Position)
+        -- 3. Teleport player directly to assigned egg
+        teleportTo(target.Part.Position)
+        task.wait(0.12)
         if not State.Enabled then break end
 
         if not target.Model.Parent or not target.Prompt.Parent or not target.Prompt.Enabled then
@@ -868,8 +914,8 @@ local function runCollectionLoop()
             continue
         end
 
-        -- 6. Navigate to deposit plot
-        State.CurrentStatus = "Carrying to Plot Deposit..."
+        -- 6. Tween back to player's base plot
+        State.CurrentStatus = "Tweening back to Plot Base..."
         updateStatusUI()
 
         local depositPos = getDepositTargetPosition()
@@ -911,7 +957,8 @@ local function runCollectionLoop()
             sendEggFarmedWebhook(target)
         end
 
-        task.wait(0.3)
+        -- Wait 1 second at the player's plot before teleporting to the next assigned egg
+        task.wait(1.0)
     end
 
     State.CurrentStatus = "Stopped"
@@ -2767,8 +2814,8 @@ SessionSection:Paragraph({
 })
 
 SessionSection:Paragraph({
-    Title = "⚡ Controls & Shortcuts",
-    Desc = "• Toggle Menu: RightControl or RightShift\n• Center Window: Settings Tab -> Center Window\n• Scale HUD: Settings Tab -> HUD Scale\n• Movement Speed: Adjust Tween speed instantly from 0 to 375 studs/s"
+    Title = "🎮 Controls & Shortcuts",
+    Desc = "• Toggle Menu: RightControl or RightShift\n• Center Window: Settings Tab -> Center Window\n• Scale HUD: Settings Tab -> HUD Scale\n• Movement Speed: Adjust Return Tween speed instantly from 0 to 350 studs/s"
 })
 
 -- Automatically select Information Tab upon initial load
@@ -2940,13 +2987,13 @@ local MoveSection = MoveTab:Section({
     Opened = true
 })
 
--- MOVEMENT SPEED CHANGER (0 to 375 studs/s, applied instantly)
+-- MOVEMENT SPEED CHANGER (0 to 350 studs/s, applied instantly)
 local UnifiedSpeedSlider = MoveSection:Slider({
-    Title = "Movement Speed",
-    Desc = "Adjust movement speed from 0 to 375 studs/s (applied instantly)",
+    Title = "Return Tween Speed",
+    Desc = "Adjust speed when tweening back to base (0 to 350 studs/s, applied instantly)",
     Value = {
         Min = 0,
-        Max = 375,
+        Max = 350,
         Default = 60
     },
     Step = 1,
@@ -2957,17 +3004,6 @@ local UnifiedSpeedSlider = MoveSection:Slider({
             local hrp = getHRP()
             if State.Enabled and State.ActiveTween and State.CurrentTargetPos and hrp then
                 State.ActiveTween:Cancel()
-                State.ActiveTween = nil
-                if val > 0 then
-                    local adjustedTarget = State.CurrentTargetPos + Vector3.new(0, 2.5, 0)
-                    local distance = (hrp.Position - adjustedTarget).Magnitude
-                    local newDuration = math.clamp(distance / val, 0.05, 45)
-                    local newTween = TweenService:Create(hrp, TweenInfo.new(newDuration, Enum.EasingStyle.Linear), {
-                        CFrame = CFrame.new(adjustedTarget)
-                    })
-                    State.ActiveTween = newTween
-                    newTween:Play()
-                end
             end
             local hum = getHumanoid()
             if hum then
