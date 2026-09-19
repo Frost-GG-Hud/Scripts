@@ -85,7 +85,7 @@
       "revoked_by_name": "cupidat"
     },
     {
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789782925,
       "duration": "6 hours",
       "created_at": 1789761325,
@@ -93,7 +93,7 @@
       "created_by_name": "remarkable_kiwi_62025",
       "key": "FROST-6H-7ER6-FLYQ",
       "claimed_by": 1475620425827614800,
-      "status": "Revoked",
+      "status": "Expired",
       "revoked_at": 1789763655,
       "revoked_by": 1303832901540122700,
       "revoked_by_name": "cupidat"
