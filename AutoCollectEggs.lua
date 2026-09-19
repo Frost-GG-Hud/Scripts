@@ -3534,7 +3534,549 @@ UIControls.ToggleWeatherNotifications = WebhookTriggersSection:Toggle({
 })
 
 --------------------------------------------------------------------------------
--- TAB 7: SETTINGS & HUD CUSTOMIZATION
+-- TAB 7: CONFIGURATIONS (MULTI-PROFILE MANAGER)
+--------------------------------------------------------------------------------
+local ConfigurationsTab = Window:Tab({
+    Title = "Configurations",
+    Icon = "folder-cog"
+})
+
+local CONFIGS_FILE = "FrostHub/configurations.json"
+local LEGACY_CONFIG_FILE = "FrostHub/config.json"
+
+local function ensureConfigFolder()
+    pcall(function()
+        if isfolder and not isfolder("FrostHub") and makefolder then
+            makefolder("FrostHub")
+        end
+    end)
+end
+
+local function captureCurrentSettings()
+    return {
+        AutoCollect = State.Enabled,
+        CollectByLuck = Config.CollectByLuck,
+        MinLuckString = Config.MinLuckString or "1m",
+        Speed = Config.Speed or 60,
+        NoclipOnTween = Config.NoclipOnTween,
+        EggESP = (EggESP and EggESP.Enabled) or false,
+        ESPMinLuckString = Config.ESPMinLuckString or "0",
+        AutoIndex = (UtilitiesConfig and UtilitiesConfig.AutoIndex) or false,
+        AutoRebirth = (UtilitiesConfig and UtilitiesConfig.AutoRebirth) or false,
+        AutoHatchLuck = (UtilitiesConfig and UtilitiesConfig.AutoHatchLuck) or false,
+        WebhookEnabled = Config.WebhookEnabled or false,
+        WebhookURL = Config.WebhookURL or "",
+        EggNotifications = Config.EggNotifications ~= false,
+        WeatherNotifications = Config.WeatherNotifications ~= false,
+        HUDScale = Config.HUDScale or 100,
+        SavedAt = os.date("%Y-%m-%d %H:%M:%S"),
+        SavedTimestamp = os.time()
+    }
+end
+
+local function loadAllConfigsFromDisk()
+    ensureConfigFolder()
+    local store = {
+        Active = "Default",
+        Configs = {}
+    }
+
+    if isfile and isfile(CONFIGS_FILE) then
+        local raw = readfile(CONFIGS_FILE)
+        local success, parsed = pcall(function()
+            return HttpService:JSONDecode(raw)
+        end)
+        if success and typeof(parsed) == "table" and parsed.Configs and typeof(parsed.Configs) == "table" then
+            return parsed
+        end
+    end
+
+    -- Check for legacy single-config file to import
+    if isfile and isfile(LEGACY_CONFIG_FILE) then
+        pcall(function()
+            local raw = readfile(LEGACY_CONFIG_FILE)
+            local legacy = HttpService:JSONDecode(raw)
+            if legacy and typeof(legacy) == "table" then
+                store.Configs["Default"] = legacy
+                store.Active = "Default"
+            end
+        end)
+    end
+
+    if not store.Configs["Default"] then
+        store.Configs["Default"] = captureCurrentSettings()
+    end
+
+    return store
+end
+
+local function saveAllConfigsToDisk(store)
+    ensureConfigFolder()
+    if not (writefile and isfolder) then return false end
+    local success, jsonStr = pcall(function()
+        return HttpService:JSONEncode(store)
+    end)
+    if success and jsonStr then
+        writefile(CONFIGS_FILE, jsonStr)
+        return true
+    end
+    return false
+end
+
+local function getConfigNamesList(store)
+    local list = {}
+    for name, _ in pairs(store.Configs or {}) do
+        table.insert(list, tostring(name))
+    end
+    table.sort(list, function(a, b)
+        if string.lower(a) == "default" then return true end
+        if string.lower(b) == "default" then return false end
+        return string.lower(a) < string.lower(b)
+    end)
+    if #list == 0 then
+        table.insert(list, "Default")
+    end
+    return list
+end
+
+local configStore = loadAllConfigsFromDisk()
+local currentSelectedConfig = configStore.Active or "Default"
+local configNames = getConfigNamesList(configStore)
+
+-- SECTION 1: PROFILES & SELECTION
+local ConfigSelectSection = ConfigurationsTab:Section({
+    Title = "Configuration Profiles",
+    Opened = true
+})
+
+local ConfigOverviewParagraph = ConfigSelectSection:Paragraph({
+    Title = "◈ Configuration Overview",
+    Desc = "Loading configurations..."
+})
+
+local function updateConfigOverviewDisplay()
+    pcall(function()
+        if not ConfigOverviewParagraph then return end
+        local totalCount = #getConfigNamesList(configStore)
+        local targetData = configStore.Configs[currentSelectedConfig]
+        local lastSaved = "Never"
+        if targetData and targetData.SavedAt then
+            lastSaved = tostring(targetData.SavedAt)
+        end
+        ConfigOverviewParagraph:SetDesc(string.format(
+            "• Selected Profile: %s\n• Total Saved: %d configurations\n• Last Saved: %s\n• Storage: FrostHub/configurations.json",
+            tostring(currentSelectedConfig),
+            totalCount,
+            lastSaved
+        ))
+    end)
+end
+
+local DropdownConfigs = ConfigSelectSection:Dropdown({
+    Title = "Select Configuration",
+    Desc = "Choose a saved configuration profile to load, update, or manage",
+    Values = configNames,
+    Value = currentSelectedConfig,
+    Callback = function(choice)
+        if choice and choice ~= "" then
+            currentSelectedConfig = choice
+            configStore.Active = choice
+            updateConfigOverviewDisplay()
+        end
+    end
+})
+
+ConfigSelectSection:Button({
+    Title = "📂 Load Configuration",
+    Desc = "Restores all settings from the selected configuration profile",
+    Callback = function()
+        pcall(function()
+            local targetData = configStore.Configs[currentSelectedConfig]
+            if not targetData then
+                WindUI:Notify({
+                    Title = "Config Error",
+                    Content = "Configuration '" .. tostring(currentSelectedConfig) .. "' not found!",
+                    Duration = 3.5,
+                    Icon = "circle-alert"
+                })
+                return
+            end
+
+            -- Apply Settings safely through UI controls
+            -- 1. Movement & Tween Speed
+            if targetData.Speed ~= nil then
+                Config.Speed = tonumber(targetData.Speed) or 60
+                if UIControls.SliderSpeed then
+                    pcall(function() UIControls.SliderSpeed:Set(Config.Speed) end)
+                end
+            end
+            if targetData.NoclipOnTween ~= nil then
+                Config.NoclipOnTween = (targetData.NoclipOnTween == true)
+                if UIControls.ToggleNoclip then
+                    pcall(function() UIControls.ToggleNoclip:Set(Config.NoclipOnTween) end)
+                end
+            end
+
+            -- 2. Egg Luck Filtering
+            if targetData.MinLuckString ~= nil then
+                local parsed = parseValueString(tostring(targetData.MinLuckString))
+                Config.MinLuck = parsed > 0 and parsed or 1000000
+                Config.MinLuckString = tostring(targetData.MinLuckString)
+                Config.MinValue = Config.MinLuck
+                Config.MinValueString = Config.MinLuckString
+                if UIControls.InputLuckFilter then
+                    pcall(function() UIControls.InputLuckFilter:Set(Config.MinLuckString) end)
+                end
+            end
+            if targetData.CollectByLuck ~= nil then
+                Config.CollectByLuck = (targetData.CollectByLuck == true)
+                Config.CollectByValue = Config.CollectByLuck
+                if UIControls.ToggleLuckFilter then
+                    pcall(function() UIControls.ToggleLuckFilter:Set(Config.CollectByLuck) end)
+                end
+            end
+
+            -- 3. Egg ESP & Filter
+            if targetData.ESPMinLuckString ~= nil then
+                local parsed = parseValueString(tostring(targetData.ESPMinLuckString))
+                Config.ESPMinLuck = parsed
+                Config.ESPMinLuckString = tostring(targetData.ESPMinLuckString)
+                if EggESP and EggESP.SetMinLuck then
+                    pcall(function() EggESP:SetMinLuck(parsed, Config.ESPMinLuckString) end)
+                end
+                if UIControls.InputESPFilter then
+                    pcall(function() UIControls.InputESPFilter:Set(Config.ESPMinLuckString) end)
+                end
+            end
+            if targetData.EggESP ~= nil then
+                Config.ESPEnabled = (targetData.EggESP == true)
+                if EggESP and EggESP.SetEnabled then
+                    pcall(function() EggESP:SetEnabled(Config.ESPEnabled) end)
+                end
+                if UIControls.ToggleEggESP then
+                    pcall(function() UIControls.ToggleEggESP:Set(Config.ESPEnabled) end)
+                end
+            end
+
+            -- 4. Utilities Automation
+            if targetData.AutoIndex ~= nil then
+                UtilitiesConfig.AutoIndex = (targetData.AutoIndex == true)
+                if UIControls.ToggleAutoIndex then
+                    pcall(function() UIControls.ToggleAutoIndex:Set(UtilitiesConfig.AutoIndex) end)
+                end
+            end
+            if targetData.AutoRebirth ~= nil then
+                UtilitiesConfig.AutoRebirth = (targetData.AutoRebirth == true)
+                if UIControls.ToggleAutoRebirth then
+                    pcall(function() UIControls.ToggleAutoRebirth:Set(UtilitiesConfig.AutoRebirth) end)
+                end
+            end
+            if targetData.AutoHatchLuck ~= nil then
+                UtilitiesConfig.AutoHatchLuck = (targetData.AutoHatchLuck == true)
+                if UIControls.ToggleAutoHatchLuck then
+                    pcall(function() UIControls.ToggleAutoHatchLuck:Set(UtilitiesConfig.AutoHatchLuck) end)
+                end
+            end
+
+            -- 5. Webhook Setup & Preferences
+            if targetData.WebhookURL ~= nil then
+                Config.WebhookURL = tostring(targetData.WebhookURL)
+                if UIControls.InputWebhookURL then
+                    pcall(function() UIControls.InputWebhookURL:Set(Config.WebhookURL) end)
+                end
+            end
+            if targetData.WebhookEnabled ~= nil then
+                Config.WebhookEnabled = (targetData.WebhookEnabled == true)
+                if UIControls.ToggleWebhook then
+                    pcall(function() UIControls.ToggleWebhook:Set(Config.WebhookEnabled) end)
+                end
+            end
+            if targetData.EggNotifications ~= nil then
+                Config.EggNotifications = (targetData.EggNotifications == true)
+                if UIControls.ToggleEggNotifications then
+                    pcall(function() UIControls.ToggleEggNotifications:Set(Config.EggNotifications) end)
+                end
+            end
+            if targetData.WeatherNotifications ~= nil then
+                Config.WeatherNotifications = (targetData.WeatherNotifications == true)
+                if UIControls.ToggleWeatherNotifications then
+                    pcall(function() UIControls.ToggleWeatherNotifications:Set(Config.WeatherNotifications) end)
+                end
+            end
+
+            -- 6. HUD Scale
+            if targetData.HUDScale ~= nil then
+                Config.HUDScale = tonumber(targetData.HUDScale) or 100
+                pcall(function() Window:SetUIScale(Config.HUDScale / 100) end)
+                if UIControls.SliderHUDScale then
+                    pcall(function() UIControls.SliderHUDScale:Set(Config.HUDScale) end)
+                end
+            end
+
+            -- 7. Auto Collect Eggs (Restored last so speed, filter & noclip are active before farming starts)
+            if targetData.AutoCollect ~= nil then
+                if UIControls.ToggleAuto then
+                    pcall(function() UIControls.ToggleAuto:Set(targetData.AutoCollect == true) end)
+                end
+            end
+
+            updateStatusUI()
+            updateConfigOverviewDisplay()
+
+            WindUI:Notify({
+                Title = "Config Loaded",
+                Content = "Loaded configuration '" .. tostring(currentSelectedConfig) .. "' successfully!",
+                Duration = 3.5,
+                Icon = "check-circle"
+            })
+        end)
+    end
+})
+
+-- SECTION 2: CREATE & SAVE CONFIGURATION
+local ConfigSaveSection = ConfigurationsTab:Section({
+    Title = "Create & Save",
+    Opened = true
+})
+
+local saveInputName = ""
+local InputConfigSaveName
+InputConfigSaveName = ConfigSaveSection:Input({
+    Title = "Configuration Name",
+    Desc = "Enter a name to create a new profile or leave blank to update selected",
+    Value = "",
+    Placeholder = "e.g. Overnight Farm, Speed Farm, High Luck...",
+    Callback = function(text)
+        saveInputName = text or ""
+    end
+})
+
+ConfigSaveSection:Button({
+    Title = "💾 Save Configuration",
+    Desc = "Saves your current active settings to the specified configuration profile",
+    Callback = function()
+        pcall(function()
+            if not (writefile and isfolder and makefolder) then
+                WindUI:Notify({
+                    Title = "Config System",
+                    Content = "Your executor does not support writefile.",
+                    Duration = 4,
+                    Icon = "circle-alert"
+                })
+                return
+            end
+
+            local rawName = ""
+            if InputConfigSaveName and InputConfigSaveName.ElementFrame then
+                local tb = InputConfigSaveName.ElementFrame:FindFirstChildWhichIsA("TextBox", true)
+                if tb and tb.Text and tb.Text ~= "" then
+                    rawName = tb.Text
+                end
+            end
+            if rawName == "" and InputConfigSaveName and InputConfigSaveName.Value and InputConfigSaveName.Value ~= "" then
+                rawName = tostring(InputConfigSaveName.Value)
+            elseif rawName == "" and saveInputName and saveInputName ~= "" then
+                rawName = tostring(saveInputName)
+            end
+
+            local cleanName = string.gsub(rawName, "^%s*(.-)%s*$", "%1")
+            if cleanName == "" then
+                cleanName = currentSelectedConfig or "Default"
+            end
+
+            local currentSettings = captureCurrentSettings()
+            configStore.Configs[cleanName] = currentSettings
+            configStore.Active = cleanName
+            currentSelectedConfig = cleanName
+
+            saveAllConfigsToDisk(configStore)
+
+            local updatedList = getConfigNamesList(configStore)
+            if DropdownConfigs and DropdownConfigs.Refresh then
+                pcall(function()
+                    DropdownConfigs:Refresh(updatedList, cleanName)
+                end)
+            end
+
+            saveInputName = ""
+            if InputConfigSaveName and InputConfigSaveName.Set then
+                pcall(function() InputConfigSaveName:Set("") end)
+            end
+
+            updateConfigOverviewDisplay()
+
+            WindUI:Notify({
+                Title = "Config Saved",
+                Content = "Saved configuration '" .. cleanName .. "' successfully!",
+                Duration = 3.5,
+                Icon = "check-circle"
+            })
+        end)
+    end
+})
+
+-- SECTION 3: MANAGE & DELETE
+local ConfigManageSection = ConfigurationsTab:Section({
+    Title = "Manage Profiles",
+    Opened = true
+})
+
+local renameInputName = ""
+local InputRename
+InputRename = ConfigManageSection:Input({
+    Title = "New Profile Name",
+    Desc = "Enter the new name for the currently selected configuration",
+    Value = "",
+    Placeholder = "Enter new name...",
+    Callback = function(text)
+        renameInputName = text or ""
+    end
+})
+
+ConfigManageSection:Button({
+    Title = "✏️ Rename Configuration",
+    Desc = "Renames the currently selected configuration to the new name above",
+    Callback = function()
+        pcall(function()
+            local targetToRename = (DropdownConfigs and DropdownConfigs.Value) or currentSelectedConfig or "Default"
+            local rawNew = ""
+            if InputRename and InputRename.ElementFrame then
+                local tb = InputRename.ElementFrame:FindFirstChildWhichIsA("TextBox", true)
+                if tb and tb.Text and tb.Text ~= "" then
+                    rawNew = tb.Text
+                end
+            end
+            if rawNew == "" and InputRename and InputRename.Value and InputRename.Value ~= "" then
+                rawNew = tostring(InputRename.Value)
+            elseif rawNew == "" and renameInputName and renameInputName ~= "" then
+                rawNew = tostring(renameInputName)
+            end
+
+            local cleanNew = string.gsub(rawNew, "^%s*(.-)%s*$", "%1")
+            if cleanNew == "" then
+                WindUI:Notify({
+                    Title = "Rename Error",
+                    Content = "Please enter a valid new name!",
+                    Duration = 3,
+                    Icon = "circle-alert"
+                })
+                return
+            end
+
+            if cleanNew == targetToRename then
+                WindUI:Notify({
+                    Title = "Rename Notice",
+                    Content = "The new name is identical to the current name.",
+                    Duration = 3,
+                    Icon = "info"
+                })
+                return
+            end
+
+            if configStore.Configs[cleanNew] then
+                WindUI:Notify({
+                    Title = "Rename Error",
+                    Content = "A configuration named '" .. cleanNew .. "' already exists!",
+                    Duration = 3.5,
+                    Icon = "circle-alert"
+                })
+                return
+            end
+
+            local oldTarget = configStore.Configs[targetToRename]
+            if not oldTarget then
+                WindUI:Notify({
+                    Title = "Rename Error",
+                    Content = "Selected configuration not found!",
+                    Duration = 3,
+                    Icon = "circle-alert"
+                })
+                return
+            end
+
+            configStore.Configs[cleanNew] = oldTarget
+            configStore.Configs[targetToRename] = nil
+            currentSelectedConfig = cleanNew
+            configStore.Active = cleanNew
+
+            saveAllConfigsToDisk(configStore)
+
+            local updatedList = getConfigNamesList(configStore)
+            if DropdownConfigs and DropdownConfigs.Refresh then
+                pcall(function()
+                    DropdownConfigs:Refresh(updatedList, cleanNew)
+                end)
+            end
+
+            renameInputName = ""
+            if InputRename and InputRename.Set then
+                pcall(function() InputRename:Set("") end)
+            end
+
+            updateConfigOverviewDisplay()
+
+            WindUI:Notify({
+                Title = "Config Renamed",
+                Content = "Renamed to '" .. cleanNew .. "' successfully!",
+                Duration = 3.5,
+                Icon = "check-circle"
+            })
+        end)
+    end
+})
+
+ConfigManageSection:Button({
+    Title = "🗑️ Delete Configuration",
+    Desc = "Deletes the currently selected configuration profile",
+    Callback = function()
+        pcall(function()
+            local targetToDelete = (DropdownConfigs and DropdownConfigs.Value) or currentSelectedConfig or "Default"
+            if not configStore.Configs[targetToDelete] then
+                WindUI:Notify({
+                    Title = "Delete Error",
+                    Content = "Selected configuration not found!",
+                    Duration = 3,
+                    Icon = "circle-alert"
+                })
+                return
+            end
+
+            configStore.Configs[targetToDelete] = nil
+
+            local remainingNames = getConfigNamesList(configStore)
+            if #remainingNames == 0 or (remainingNames[1] == "Default" and not configStore.Configs["Default"]) then
+                configStore.Configs["Default"] = captureCurrentSettings()
+                remainingNames = {"Default"}
+            end
+
+            currentSelectedConfig = remainingNames[1]
+            configStore.Active = currentSelectedConfig
+
+            saveAllConfigsToDisk(configStore)
+
+            if DropdownConfigs and DropdownConfigs.Refresh then
+                pcall(function()
+                    DropdownConfigs:Refresh(remainingNames, currentSelectedConfig)
+                end)
+            end
+
+            updateConfigOverviewDisplay()
+
+            WindUI:Notify({
+                Title = "Config Deleted",
+                Content = "Deleted configuration '" .. targetToDelete .. "'!",
+                Duration = 3.5,
+                Icon = "trash-2"
+            })
+        end)
+    end
+})
+
+updateConfigOverviewDisplay()
+
+
+--------------------------------------------------------------------------------
+-- TAB 8: SETTINGS & HUD CUSTOMIZATION
 --------------------------------------------------------------------------------
 local SettingsTab = Window:Tab({
     Title = "Settings",
@@ -3571,275 +4113,6 @@ AppearanceSection:Button({
     end
 })
 
---------------------------------------------------------------------------------
--- CONFIGURATION SECTION (SAVE & LOAD SETTINGS)
---------------------------------------------------------------------------------
-local ConfigurationSection = SettingsTab:Section({
-    Title = "Configuration",
-    Opened = true
-})
-
-local ConfigStatusParagraph = ConfigurationSection:Paragraph({
-    Title = "◈ Configuration Status",
-    Desc = "• Status: Checking for saved config...\n• File: FrostHub/config.json"
-})
-
-local function updateConfigStatusDisplay()
-    pcall(function()
-        if not ConfigStatusParagraph then return end
-        local hasFile = false
-        pcall(function()
-            if isfile and isfile("FrostHub/config.json") then
-                hasFile = true
-            end
-        end)
-
-        if hasFile then
-            local infoStr = "Saved configuration available"
-            pcall(function()
-                local raw = readfile("FrostHub/config.json")
-                local data = HttpService:JSONDecode(raw)
-                if data and data.SavedAt then
-                    infoStr = "Last saved: " .. tostring(data.SavedAt)
-                end
-            end)
-            ConfigStatusParagraph:SetDesc("• Status: Saved config ready\n• File: FrostHub/config.json\n• " .. infoStr)
-        else
-            ConfigStatusParagraph:SetDesc("• Status: No saved config found\n• File: FrostHub/config.json\n• Click 'Save Config' below to save your current settings.")
-        end
-    end)
-end
-
-updateConfigStatusDisplay()
-
-ConfigurationSection:Button({
-    Title = "💾 Save Config",
-    Desc = "Saves your current toggles, filters, speed, and settings to FrostHub/config.json",
-    Callback = function()
-        pcall(function()
-            if not (writefile and isfolder and makefolder) then
-                WindUI:Notify({
-                    Title = "Config System",
-                    Content = "Your executor does not support writefile.",
-                    Duration = 4,
-                    Icon = "circle-alert"
-                })
-                return
-            end
-
-            pcall(function()
-                if not isfolder("FrostHub") then
-                    makefolder("FrostHub")
-                end
-            end)
-
-            local configData = {
-                AutoCollect = State.Enabled,
-                CollectByLuck = Config.CollectByLuck,
-                MinLuckString = Config.MinLuckString or "1m",
-                Speed = Config.Speed or 60,
-                NoclipOnTween = Config.NoclipOnTween,
-                EggESP = (EggESP and EggESP.Enabled) or false,
-                ESPMinLuckString = Config.ESPMinLuckString or "0",
-                AutoIndex = (UtilitiesConfig and UtilitiesConfig.AutoIndex) or false,
-                AutoRebirth = (UtilitiesConfig and UtilitiesConfig.AutoRebirth) or false,
-                AutoHatchLuck = (UtilitiesConfig and UtilitiesConfig.AutoHatchLuck) or false,
-                WebhookEnabled = Config.WebhookEnabled or false,
-                WebhookURL = Config.WebhookURL or "",
-                EggNotifications = Config.EggNotifications ~= false,
-                WeatherNotifications = Config.WeatherNotifications ~= false,
-                HUDScale = Config.HUDScale or 100,
-                SavedAt = os.date("%Y-%m-%d %H:%M:%S"),
-                SavedTimestamp = os.time()
-            }
-
-            local jsonString = HttpService:JSONEncode(configData)
-            writefile("FrostHub/config.json", jsonString)
-
-            updateConfigStatusDisplay()
-
-            WindUI:Notify({
-                Title = "Config Saved",
-                Content = "Settings saved to FrostHub/config.json successfully!",
-                Duration = 3.5,
-                Icon = "check-circle"
-            })
-        end)
-    end
-})
-
-ConfigurationSection:Button({
-    Title = "📂 Load Config",
-    Desc = "Restores your saved settings without having to re-enable everything manually",
-    Callback = function()
-        pcall(function()
-            if not (readfile and isfile) then
-                WindUI:Notify({
-                    Title = "Config System",
-                    Content = "Your executor does not support readfile.",
-                    Duration = 4,
-                    Icon = "circle-alert"
-                })
-                return
-            end
-
-            if not isfile("FrostHub/config.json") then
-                WindUI:Notify({
-                    Title = "No Saved Config",
-                    Content = "No saved configuration file found in FrostHub/config.json!\nPlease click 'Save Config' first to save your settings.",
-                    Duration = 4,
-                    Icon = "circle-alert"
-                })
-                return
-            end
-
-            local raw = readfile("FrostHub/config.json")
-            local data = nil
-            local success, err = pcall(function()
-                data = HttpService:JSONDecode(raw)
-            end)
-
-            if not success or not data or typeof(data) ~= "table" then
-                WindUI:Notify({
-                    Title = "Config Error",
-                    Content = "Failed to parse saved config file.",
-                    Duration = 4,
-                    Icon = "circle-alert"
-                })
-                return
-            end
-
-            -- Apply Settings safely through UI controls
-            -- 1. Movement & Tween Speed
-            if data.Speed ~= nil then
-                Config.Speed = tonumber(data.Speed) or 60
-                if UIControls.SliderSpeed then
-                    pcall(function() UIControls.SliderSpeed:Set(Config.Speed) end)
-                end
-            end
-            if data.NoclipOnTween ~= nil then
-                Config.NoclipOnTween = (data.NoclipOnTween == true)
-                if UIControls.ToggleNoclip then
-                    pcall(function() UIControls.ToggleNoclip:Set(Config.NoclipOnTween) end)
-                end
-            end
-
-            -- 2. Egg Luck Filtering
-            if data.MinLuckString ~= nil then
-                local parsed = parseValueString(tostring(data.MinLuckString))
-                Config.MinLuck = parsed > 0 and parsed or 1000000
-                Config.MinLuckString = tostring(data.MinLuckString)
-                Config.MinValue = Config.MinLuck
-                Config.MinValueString = Config.MinLuckString
-                if UIControls.InputLuckFilter then
-                    pcall(function() UIControls.InputLuckFilter:Set(Config.MinLuckString) end)
-                end
-            end
-            if data.CollectByLuck ~= nil then
-                Config.CollectByLuck = (data.CollectByLuck == true)
-                Config.CollectByValue = Config.CollectByLuck
-                if UIControls.ToggleLuckFilter then
-                    pcall(function() UIControls.ToggleLuckFilter:Set(Config.CollectByLuck) end)
-                end
-            end
-
-            -- 3. Egg ESP & Filter
-            if data.ESPMinLuckString ~= nil then
-                local parsed = parseValueString(tostring(data.ESPMinLuckString))
-                Config.ESPMinLuck = parsed
-                Config.ESPMinLuckString = tostring(data.ESPMinLuckString)
-                if EggESP and EggESP.SetMinLuck then
-                    pcall(function() EggESP:SetMinLuck(parsed, Config.ESPMinLuckString) end)
-                end
-                if UIControls.InputESPFilter then
-                    pcall(function() UIControls.InputESPFilter:Set(Config.ESPMinLuckString) end)
-                end
-            end
-            if data.EggESP ~= nil then
-                Config.ESPEnabled = (data.EggESP == true)
-                if EggESP and EggESP.SetEnabled then
-                    pcall(function() EggESP:SetEnabled(Config.ESPEnabled) end)
-                end
-                if UIControls.ToggleEggESP then
-                    pcall(function() UIControls.ToggleEggESP:Set(Config.ESPEnabled) end)
-                end
-            end
-
-            -- 4. Utilities Automation
-            if data.AutoIndex ~= nil then
-                UtilitiesConfig.AutoIndex = (data.AutoIndex == true)
-                if UIControls.ToggleAutoIndex then
-                    pcall(function() UIControls.ToggleAutoIndex:Set(UtilitiesConfig.AutoIndex) end)
-                end
-            end
-            if data.AutoRebirth ~= nil then
-                UtilitiesConfig.AutoRebirth = (data.AutoRebirth == true)
-                if UIControls.ToggleAutoRebirth then
-                    pcall(function() UIControls.ToggleAutoRebirth:Set(UtilitiesConfig.AutoRebirth) end)
-                end
-            end
-            if data.AutoHatchLuck ~= nil then
-                UtilitiesConfig.AutoHatchLuck = (data.AutoHatchLuck == true)
-                if UIControls.ToggleAutoHatchLuck then
-                    pcall(function() UIControls.ToggleAutoHatchLuck:Set(UtilitiesConfig.AutoHatchLuck) end)
-                end
-            end
-
-            -- 5. Webhook Setup & Preferences
-            if data.WebhookURL ~= nil then
-                Config.WebhookURL = tostring(data.WebhookURL)
-                if UIControls.InputWebhookURL then
-                    pcall(function() UIControls.InputWebhookURL:Set(Config.WebhookURL) end)
-                end
-            end
-            if data.WebhookEnabled ~= nil then
-                Config.WebhookEnabled = (data.WebhookEnabled == true)
-                if UIControls.ToggleWebhook then
-                    pcall(function() UIControls.ToggleWebhook:Set(Config.WebhookEnabled) end)
-                end
-            end
-            if data.EggNotifications ~= nil then
-                Config.EggNotifications = (data.EggNotifications == true)
-                if UIControls.ToggleEggNotifications then
-                    pcall(function() UIControls.ToggleEggNotifications:Set(Config.EggNotifications) end)
-                end
-            end
-            if data.WeatherNotifications ~= nil then
-                Config.WeatherNotifications = (data.WeatherNotifications == true)
-                if UIControls.ToggleWeatherNotifications then
-                    pcall(function() UIControls.ToggleWeatherNotifications:Set(Config.WeatherNotifications) end)
-                end
-            end
-
-            -- 6. HUD Scale
-            if data.HUDScale ~= nil then
-                Config.HUDScale = tonumber(data.HUDScale) or 100
-                pcall(function() Window:SetUIScale(Config.HUDScale / 100) end)
-                if UIControls.SliderHUDScale then
-                    pcall(function() UIControls.SliderHUDScale:Set(Config.HUDScale) end)
-                end
-            end
-
-            -- 7. Auto Collect Eggs (Restored last so speed, filter & noclip are active before farming starts)
-            if data.AutoCollect ~= nil then
-                if UIControls.ToggleAuto then
-                    pcall(function() UIControls.ToggleAuto:Set(data.AutoCollect == true) end)
-                end
-            end
-
-            updateStatusUI()
-            updateConfigStatusDisplay()
-
-            WindUI:Notify({
-                Title = "Config Loaded",
-                Content = "All saved settings have been restored successfully!",
-                Duration = 3.5,
-                Icon = "check-circle"
-            })
-        end)
-    end
-})
-
 
 --------------------------------------------------------------------------------
 -- MINIMIZED FROST HUB LOGO BOX
@@ -3868,8 +4141,8 @@ local function setupMinimizedLogoBox()
     logoBox.Size = UDim2.fromOffset(50, 50)
     logoBox.Position = UDim2.new(0, 20, 0, 140)
     logoBox.AnchorPoint = Vector2.new(0, 0)
-    logoBox.BackgroundColor3 = Color3.fromRGB(13, 16, 26)
-    logoBox.BackgroundTransparency = 0.15
+    logoBox.BackgroundColor3 = Color3.fromRGB(42, 42, 44)
+    logoBox.BackgroundTransparency = 0.05
     logoBox.AutoButtonColor = false
     logoBox.BorderSizePixel = 0
     logoBox.Visible = false
@@ -3881,19 +4154,10 @@ local function setupMinimizedLogoBox()
     corner.Parent = logoBox
     
     local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1.8
-    stroke.Color = Color3.fromRGB(0, 210, 255)
+    stroke.Thickness = 1.4
+    stroke.Color = Color3.fromRGB(68, 68, 74)
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Parent = logoBox
-    
-    local strokeGradient = Instance.new("UIGradient")
-    strokeGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 230, 255)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(70, 150, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 230, 255)),
-    })
-    strokeGradient.Rotation = 45
-    strokeGradient.Parent = stroke
     
     local glow = Instance.new("ImageLabel")
     glow.Name = "Glow"
@@ -3902,8 +4166,8 @@ local function setupMinimizedLogoBox()
     glow.AnchorPoint = Vector2.new(0.5, 0.5)
     glow.BackgroundTransparency = 1
     glow.Image = "rbxassetid://5554236805"
-    glow.ImageColor3 = Color3.fromRGB(0, 180, 255)
-    glow.ImageTransparency = 0.65
+    glow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    glow.ImageTransparency = 0.55
     glow.ScaleType = Enum.ScaleType.Slice
     glow.SliceCenter = Rect.new(23, 23, 277, 277)
     glow.ZIndex = 99
@@ -3916,7 +4180,7 @@ local function setupMinimizedLogoBox()
     icon.AnchorPoint = Vector2.new(0.5, 0.5)
     icon.BackgroundTransparency = 1
     icon.Image = "rbxassetid://101235206534566"
-    icon.ImageColor3 = Color3.fromRGB(0, 225, 255)
+    icon.ImageColor3 = Color3.fromRGB(240, 240, 245)
     icon.ZIndex = 101
     icon.Parent = logoBox
     
@@ -3959,25 +4223,19 @@ local function setupMinimizedLogoBox()
     -- Hover Animations
     logoBox.MouseEnter:Connect(function()
         TweenService:Create(logoBox, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            BackgroundColor3 = Color3.fromRGB(20, 25, 42)
+            BackgroundColor3 = Color3.fromRGB(52, 52, 56)
         }):Play()
         TweenService:Create(icon, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            ImageColor3 = Color3.fromRGB(180, 245, 255)
-        }):Play()
-        TweenService:Create(glow, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            ImageTransparency = 0.40
+            ImageColor3 = Color3.fromRGB(255, 255, 255)
         }):Play()
     end)
     
     logoBox.MouseLeave:Connect(function()
         TweenService:Create(logoBox, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            BackgroundColor3 = Color3.fromRGB(13, 16, 26)
+            BackgroundColor3 = Color3.fromRGB(42, 42, 44)
         }):Play()
         TweenService:Create(icon, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            ImageColor3 = Color3.fromRGB(0, 225, 255)
-        }):Play()
-        TweenService:Create(glow, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            ImageTransparency = 0.65
+            ImageColor3 = Color3.fromRGB(240, 240, 245)
         }):Play()
     end)
 
