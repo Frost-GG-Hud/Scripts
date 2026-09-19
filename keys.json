@@ -399,14 +399,14 @@
     },
     {
       "hwid": "7b65353437613737302d393831622d313166302d623433642d3830366536663665363936337d",
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789838988,
       "duration": "6 hours",
       "created_at": 1789817388,
       "created_by": 1475620425827614800,
       "created_by_name": "remarkable_kiwi_62025",
       "key": "FROST-6H-3MYU-DUGK",
-      "status": "Active",
+      "status": "Expired",
       "hwid_user": "XxcrownRblx (7642909171)",
       "hwid_linked_at": 1789817928,
       "claimed_by": 1475620425827614800
