@@ -72,12 +72,22 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
   - **No Auto-Load On Rejoin**: Configurations are never loaded automatically upon rejoining—giving players total control over when and what to load.
 
 
+- **📊 Automatic Execution Tracking & Discord Logging (Channel 1550661063731843102)**:
+  - Automatically records and logs every script execution to Discord channel `<#1550661063731843102>`.
+  - **Player Identification**: Roblox Username, Display Name, User ID, and direct profile link.
+  - **Game & Server Context**: Experience title, Place ID link, and server Job ID.
+  - **Execution Event**: Script initialization event, Hub version `V 0.1`, executor name (e.g. Wave, Delta, Synapse, Real), and live relative timestamp (`<t:time:R>`).
+  - **Persistent Global Counter**: Tracks overall executions in `executions.json` on GitHub with automatic incrementation on every execution.
+  - **HUD Integration**: Live global counter displayed dynamically inside the **Information** tab under `Session & Player Overview` (`⚡ Global Executions`).
+
+
 ### 🤖 Discord Bot Commands & Key System
 
 The official Frost Hub Discord Bot manages community keys and announcements:
 - **🎁 `/claim key`**: Available to **everyone**. DMs the user with their personal **6-hour key** in <#1550589425497542676>. Automatically sends a follow-up DM when the key expires after 6 hours reminding them to claim a new one. Enforces a strict **one key per 6 hours** cooldown per user (bypassed by role ID `1550567704925044858`).
 - **🛡️ `,verifysetup`**: Sends the official verification embed with **Add Bot to Your App** and **Verify & Claim Roles** buttons directly into channel `<#1550596467075452968>`. Pings `<@&1549092244374421554>` and grants the Member and Section roles upon clicking verify, with support tickets directed to `<#1549104953463803934>` and successful verifications logged in `<#1549394258644176917>`. (Admin/Authorized restricted).
 - **ℹ️ `,info [#channel]`**: Sends official script info to a selected channel (e.g. `,info #general`), directs users to `<#1550589425497542676>` to claim their free 6-hour key, links support tickets to `<#1549104953463803934>`, and attaches an interactive **Supported Games** button displaying `Ride a Pet`. If run in or directed to the verification channel, automatically deploys verification setup.
+- **📊 `,executions` (or `/executions`)**: View live global execution statistics, total execution count, last executed player, last game, and timestamp.
 - **🔑 `,ck [@user] <duration>`**: Generate keys with custom durations (e.g. `,ck 7 days`, `,ck 24h`, `,ck lifetime` or `,ck @user 1w`). When pinging a user (e.g. `,ck @Pinguser 1w`), automatically delivers the key and instructions directly to their DMs, and sends the key embed to the channel so they still have access to it even if messages get deleted. Syncs immediately to GitHub and logs creation to `<#1550571106497470584>`. Restricted to role ID `1550567704925044858`.
 - **📋 `,keys [filter]`**: View all keys in a public embed with interactive **Previous** and **Next** page swipe buttons. Supports filters: `,keys active` (active keys only), `,keys revoked` (revoked keys only), `,keys expired` (expired keys only), or `,keys` (all keys). Restricted to role ID `1550567704925044858`.
 - **🚫 `,rk <key>`**: Instantly revoke a script key with immediate GitHub sync and in-game cutoff (e.g. `,rk 423432423` or `,rk FROST-XXXX`). Restricted to role ID `1550567704925044858`.
