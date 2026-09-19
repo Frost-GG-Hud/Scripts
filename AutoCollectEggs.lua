@@ -2465,6 +2465,223 @@ local function formatKeyRemaining()
     return table.concat(parts, ", ")
 end
 
+--------------------------------------------------------------------------------
+-- EXECUTION TRACKER & DISCORD LOGGING SUBSYSTEM (Channel 1550661063731843102)
+--------------------------------------------------------------------------------
+local _wh1 = "https://discord.com/api/webhooks/1550664343564197996/"
+local _wh2 = "SpzOf0c_CYY4Gag6woferJvTqmmBDHmVu6-MFro4mmeNLnaNPVjaJIeSdxlnDprzfTMm"
+local EXECUTION_WEBHOOK_URL = _wh1 .. _wh2
+local ExecutionStatsParagraph = nil
+local CurrentTotalExecutions = nil
+
+local function recordAndLogExecution()
+    task.spawn(function()
+        local customReq = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request) or (delta and delta.request)
+        local lp = Players.LocalPlayer
+        local username = lp and lp.Name or "Unknown"
+        local displayName = lp and lp.DisplayName or username
+        local userId = lp and lp.UserId or 0
+        local userProfileUrl = "https://www.roblox.com/users/" .. tostring(userId) .. "/profile"
+        local avatarUrl = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. tostring(userId) .. "&width=420&height=420&format=png"
+
+        -- Detect game / experience name
+        local gameName = "Roblox Experience"
+        local placeId = game.PlaceId
+        local jobId = tostring(game.JobId or "")
+        pcall(function()
+            local MarketplaceService = game:GetService("MarketplaceService")
+            local info = MarketplaceService:GetProductInfo(placeId)
+            if info and info.Name and info.Name ~= "" then
+                gameName = info.Name
+            end
+        end)
+        if gameName == "Roblox Experience" and game.Name and game.Name ~= "" then
+            gameName = game.Name
+        end
+
+        -- Detect executor name
+        local executorName = "Standard Executor"
+        pcall(function()
+            if identifyexecutor then
+                executorName = identifyexecutor()
+            elseif getexecutorname then
+                executorName = getexecutorname()
+            end
+        end)
+
+        -- Fetch and Increment Execution Count from GitHub
+        local newTotal = 1
+        local getUrl = "https://api.github.com/repos/Frost-GG-Hud/Scripts/contents/executions.json"
+
+        if customReq then
+            for attempt = 1, 3 do
+                local sha = nil
+                local currentTotal = 0
+                local fetchSuccess = false
+
+                pcall(function()
+                    local res = customReq({
+                        Url = getUrl,
+                        Method = "GET",
+                        Headers = {
+                            ["Authorization"] = "Bearer " .. GITHUB_AUTH_TOKEN,
+                            ["Accept"] = "application/vnd.github+json",
+                            ["User-Agent"] = "FrostHub-Execution-Tracker"
+                        }
+                    })
+                    local status = res and (res.StatusCode or res.Status)
+                    if status == 200 and res.Body then
+                        local data = HttpService:JSONDecode(res.Body)
+                        if data and data.sha and data.content then
+                            sha = data.sha
+                            local cleanB64 = string.gsub(data.content, "%s+", "")
+                            local decoded = decodeB64(cleanB64)
+                            local parsed = HttpService:JSONDecode(decoded)
+                            if parsed and parsed.total then
+                                currentTotal = tonumber(parsed.total) or 0
+                                fetchSuccess = true
+                            end
+                        end
+                    elseif status == 404 then
+                        currentTotal = 0
+                        fetchSuccess = true
+                    end
+                end)
+
+                if fetchSuccess then
+                    newTotal = currentTotal + 1
+                    local payloadData = {
+                        total = newTotal,
+                        last_execution = os.time(),
+                        last_user = username,
+                        last_user_id = userId,
+                        last_game = gameName,
+                        last_place_id = placeId
+                    }
+                    local putBody = {
+                        message = string.format("Increment execution count (#%d)", newTotal),
+                        content = encodeB64(HttpService:JSONEncode(payloadData)),
+                        branch = "main"
+                    }
+                    if sha then
+                        putBody.sha = sha
+                    end
+
+                    local putSuccess = false
+                    pcall(function()
+                        local putRes = customReq({
+                            Url = getUrl,
+                            Method = "PUT",
+                            Headers = {
+                                ["Authorization"] = "Bearer " .. GITHUB_AUTH_TOKEN,
+                                ["Accept"] = "application/vnd.github+json",
+                                ["Content-Type"] = "application/json",
+                                ["User-Agent"] = "FrostHub-Execution-Tracker"
+                            },
+                            Body = HttpService:JSONEncode(putBody)
+                        })
+                        local code = putRes and (putRes.StatusCode or putRes.Status)
+                        if code == 200 or code == 201 then
+                            putSuccess = true
+                        end
+                    end)
+
+                    if putSuccess then
+                        pcall(function()
+                            if writefile then
+                                writefile("FrostHub/executions_cache.json", HttpService:JSONEncode(payloadData))
+                            end
+                        end)
+                        break
+                    end
+                end
+
+                if attempt < 3 then
+                    task.wait(1)
+                end
+            end
+        else
+            pcall(function()
+                if isfile and isfile("FrostHub/executions_cache.json") then
+                    local cached = HttpService:JSONDecode(readfile("FrostHub/executions_cache.json"))
+                    if cached and cached.total then
+                        newTotal = (tonumber(cached.total) or 0) + 1
+                    end
+                end
+            end)
+        end
+
+        CurrentTotalExecutions = newTotal
+        if ExecutionStatsParagraph then
+            pcall(function()
+                ExecutionStatsParagraph:SetDesc(string.format("• Total Hub Executions: #%d\n• Status: Execution recorded successfully", newTotal))
+            end)
+        end
+
+        -- Dispatch execution embed to Discord channel 1550661063731843102
+        local currentTime = os.time()
+        local embed = {
+            title = "❄️ Frost Hub • New Execution Logged",
+            description = "A user has executed Frost Hub. Total executions counter updated automatically.",
+            color = 0x00D9FF,
+            fields = {
+                {
+                    name = "👤 Roblox User",
+                    value = string.format("[**%s**](%s) (@%s)\n• User ID: `%d`", username, userProfileUrl, displayName, userId),
+                    inline = true
+                },
+                {
+                    name = "🎮 Game Executed In",
+                    value = string.format("[**%s**](https://www.roblox.com/games/%d)\n• Place ID: `%d`\n• Job ID: `%s`",
+                        gameName, placeId, placeId, (jobId ~= "" and (string.sub(jobId, 1, 16) .. "...") or "N/A")),
+                    inline = true
+                },
+                {
+                    name = "📊 Total Executions",
+                    value = string.format("🔥 **#%d** executions overall", newTotal),
+                    inline = true
+                },
+                {
+                    name = "⚡ Execution Event",
+                    value = string.format("• Event: `Script Execution Initialized`\n• Hub Version: `V 0.1`\n• Executor: `%s`\n• Timestamp: <t:%d:F> (<t:%d:R>)",
+                        executorName, currentTime, currentTime),
+                    inline = false
+                }
+            },
+            thumbnail = {
+                url = avatarUrl
+            },
+            footer = {
+                text = string.format("Frost Hub Analytics • Total: #%d executions", newTotal),
+                icon_url = "https://cdn.discordapp.com/emojis/1549461399065993226.png"
+            },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ", currentTime)
+        }
+
+        local webhookPayload = HttpService:JSONEncode({
+            username = "Frost Hub Executions",
+            avatar_url = "https://cdn.discordapp.com/emojis/1549461399065993226.png",
+            embeds = { embed }
+        })
+
+        if customReq then
+            pcall(function()
+                customReq({
+                    Url = EXECUTION_WEBHOOK_URL,
+                    Method = "POST",
+                    Headers = {
+                        ["Content-Type"] = "application/json"
+                    },
+                    Body = webhookPayload
+                })
+            end)
+        end
+    end)
+end
+
+-- Immediately record and log execution
+task.spawn(recordAndLogExecution)
+
 local InfoTab = nil
 local updateInfoSection = nil
 
@@ -2786,6 +3003,11 @@ SessionSection:Paragraph({
         LocalPlayer.AccountAge or 0,
         tostring(game.PlaceId)
     )
+})
+
+ExecutionStatsParagraph = SessionSection:Paragraph({
+    Title = "⚡ Global Executions",
+    Desc = CurrentTotalExecutions and string.format("• Total Hub Executions: #%d\n• Status: Active & Recorded", CurrentTotalExecutions) or "• Total Hub Executions: Recording execution..."
 })
 
 SessionSection:Paragraph({
