@@ -71,7 +71,7 @@
       "expired_notified": true
     },
     {
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789782783,
       "duration": "6 hours",
       "created_at": 1789761183,
@@ -79,7 +79,7 @@
       "created_by_name": "cupidat",
       "key": "FROST-6H-PFZR-T4DM",
       "claimed_by": 1303832901540122700,
-      "status": "Revoked",
+      "status": "Expired",
       "revoked_at": 1789763664,
       "revoked_by": 1303832901540122700,
       "revoked_by_name": "cupidat"
