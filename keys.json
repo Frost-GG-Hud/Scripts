@@ -458,6 +458,18 @@
       "expired_notified": false,
       "hwid": null,
       "status": "Active"
+    },
+    {
+      "key": "FROST-6H-S8D7-XZV7",
+      "created_at": 1789819444,
+      "expires_at": 1789841044,
+      "duration": "6 hours",
+      "created_by": 556378217548873731,
+      "created_by_name": "0cb0",
+      "claimed_by": 556378217548873731,
+      "expired_notified": false,
+      "hwid": null,
+      "status": "Active"
     }
   ]
 }
