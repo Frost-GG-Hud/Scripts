@@ -114,14 +114,14 @@
     },
     {
       "hwid": "7b65353437613737302d393831622d313166302d623433642d3830366536663665363936337d",
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789786297,
       "duration": "6 hours",
       "created_at": 1789764697,
       "created_by": 1303832901540122700,
       "created_by_name": "cupidat",
       "key": "FROST-6H-T6TY-X2C6",
-      "status": "Active",
+      "status": "Expired",
       "hwid_user": "XxcrownRblx (7642909171)",
       "hwid_linked_at": 1789777940,
       "claimed_by": 1303832901540122700
