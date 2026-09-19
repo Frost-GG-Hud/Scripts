@@ -72,13 +72,19 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
   - **No Auto-Load On Rejoin**: Configurations are never loaded automatically upon rejoining—giving players total control over when and what to load.
 
 
-- **📊 Automatic Execution Tracking & Discord Logging (Channel 1550661063731843102)**:
-  - Automatically records and logs every script execution to Discord channel `<#1550661063731843102>`.
-  - **Player Identification**: Roblox Username, Display Name, User ID, and direct profile link.
-  - **Game & Server Context**: Experience title, Place ID link, and server Job ID.
-  - **Execution Event**: Script initialization event, Hub version `V 0.1`, executor name (e.g. Wave, Delta, Synapse, Real), and live relative timestamp (`<t:time:R>`).
-  - **Persistent Global Counter**: Tracks overall executions in `executions.json` on GitHub with automatic incrementation on every execution.
-  - **HUD Integration**: Live global counter displayed dynamically inside the **Information** tab under `Session & Player Overview` (`⚡ Global Executions`).
+- **👤 Bottom-Left Roblox Profile Box**:
+  - Anchored permanently to the bottom-left of the GUI sidebar below the navigation tabs.
+  - **Headshot Avatar**: Real-time Roblox user headshot avatar thumbnail (`rbxthumb://`).
+  - **Account Credentials**: Displays player Display Name in bold white, `@Username` in secondary muted grey, and license tier (`Free` or `Lifetime`).
+  - **Grey & Black Color Scheme**: Tailored in Frost Hub's card grey (`Color3.fromRGB(26, 26, 30)`), refined dark border (`Color3.fromRGB(48, 48, 54)`), and hover micro-animations matching the entire interface (no blue).
+  - **Adaptive Sidebar**: Dynamically offsets tab scrolling so items never clip or overlap.
+
+- **🔒 GitHub Script Privacy & Distribution Protection**:
+  - Automated multi-layer encryption & protection compiler pipeline (`build_protected.py` integrated into `sync.ps1`).
+  - Protects the distributed script on GitHub from being viewed, decompiled, or copied.
+  - The repository's public file contains only an obfuscated, encrypted payload with a zero-dependency in-memory unpacker.
+  - Seamlessly executes via standard `loadstring(game:HttpGet("https://raw.githubusercontent.com/Frost-GG-Hud/Scripts/main/AutoCollectEggs.lua"))()` across all Roblox executors.
+  - Clean development source code remains private and preserved locally in `AutoCollectEggs.lua`.
 
 
 ### 🤖 Discord Bot Commands & Key System
