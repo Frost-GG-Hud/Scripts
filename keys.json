@@ -210,14 +210,14 @@
     },
     {
       "hwid": "7b35633666643432342d626233362d313165662d396638322d3830366536663665363936337d",
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789796707,
       "duration": "6 hours",
       "created_at": 1789775107,
       "created_by": 797385566093049900,
       "created_by_name": "vrtx7513",
       "key": "FROST-6H-KJA3-S4QW",
-      "status": "Active",
+      "status": "Expired",
       "claimed_by": 797385566093049900,
       "hwid_linked_at": 1789775128,
       "hwid_user": "repergedon (512550275)"
