@@ -99,7 +99,7 @@
       "revoked_by_name": "cupidat"
     },
     {
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789785226,
       "duration": "6 hours",
       "created_at": 1789763626,
@@ -107,7 +107,7 @@
       "created_by_name": "cupidat",
       "key": "FROST-6H-99PC-A9T3",
       "claimed_by": 1303832901540122700,
-      "status": "Revoked",
+      "status": "Expired",
       "revoked_at": 1789763649,
       "revoked_by": 1303832901540122700,
       "revoked_by_name": "cupidat"
