@@ -13,7 +13,7 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
   - Automatically selected and opened immediately upon entering a valid script key.
   - **Hub Version**: Current hub version `V 0.1`.
   - **License & Key Validity**: Live remaining key duration formatted dynamically in days, hours, minutes, and seconds, updating automatically in real time (or permanent `Lifetime` display).
-  - **Discord Community**: Direct invite to our official Discord server (`https://discord.gg/xGfTjURZVb`) with a 1-click clipboard copy button.
+  - **Discord Community**: Direct invite to our official Discord server (`https://discord.gg/bkyQB5PTf`) with a 1-click clipboard copy button.
   - **Support & Tutorials**: Fast access to support tickets and directions to the key tutorial in `#get-script-key`.
   - **Farmer & Session Details**: Displays player username, display name, account age, place ID, and quick keybind reference with sleek typographic symbols.
 - **💎 WindUI Interface**: Dark acrylic glassmorphism, fluid micro-animations, resizable window, and notifications.
