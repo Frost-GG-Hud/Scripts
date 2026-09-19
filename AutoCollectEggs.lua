@@ -1,4651 +1,656 @@
 --[[
-    ❄️ Frost Hub - Auto Collect Eggs (WindUI Edition)
-    Advanced gameplay automation & testing system with Egg Luck filtering, live Egg Panel, and Discord webhooks.
-    
-    Features:
-    - Built on WindUI with acrylic blur, custom themes, tabs, and smooth animations
-    - Egg Panel (Live Radar & Reset Tracker):
-        • Displays every egg currently available in the game
-        • Shows egg type, individual luck value, and distance to player
-        • Live countdown timer displaying time until eggs reset or refresh
-        • Fast search bar and rarity filter pills (Any, Divine, Ethereal, Mythic, Legendary, Epic, Rare, Common)
-    - Egg Luck Filtering:
-        • Filters eggs by minimum luck using flexible shorthand formats (e.g. 100, 2k, 1m, 300b)
-        • Only collects eggs with equal to or higher luck than the entered threshold
-    - Unified Movement Speed: Single slider (1 to 400) controlling Walk and Tween speeds
-    - Movement Systems:
-        • Walk (Pathfinding) - Intelligent obstacle & fence avoidance
-        • Walk (Direct) - Straight-line speed walk
-        • Tween (Smooth) - Gliding CFrame interpolation with anti-fall & noclip
-    - Discord Webhook System:
-        • Strictly ONE consolidated notification per egg farmed (includes luck, type, distance, total count, farmer stats)
-    - Server-validated loop (RenderedEggs & player.Basket confirmation)
+    ❄️ Frost Hub • Protected Distribution Build
+    Protected & Distributed by Frost Hub Security Engine
+    Any unauthorized decompilation, dumping, or redistribution is strictly prohibited.
 --]]
 
-local Players = game:GetService("Players")
-local PathfindingService = game:GetService("PathfindingService")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
+local _G = _G or getgenv and getgenv() or {}
+local _ENV = (getfenv and getfenv()) or _ENV
 
-if getgenv and getgenv().FrostHubCleanup then
-    pcall(getgenv().FrostHubCleanup)
-end
-
-local ScriptRunId = HttpService:GenerateGUID(false)
-if getgenv then
-    getgenv().FrostHubRunId = ScriptRunId
-end
-
-local LocalPlayer = Players.LocalPlayer
-if not LocalPlayer then
-    Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
-    LocalPlayer = Players.LocalPlayer
-end
-
---------------------------------------------------------------------------------
--- STRING & VALUE PARSING UTILITIES
---------------------------------------------------------------------------------
-local function parseValueString(input)
-    if not input or input == "" then return 0 end
-    local clean = string.lower(string.gsub(tostring(input), "[,%s%$]", ""))
-    local numStr, suffix = string.match(clean, "^([%d%.]+)%s*([%a]*)$")
-    if not numStr then return 0 end
-    local num = tonumber(numStr) or 0
-
-    local multipliers = {
-        k = 1e3,
-        m = 1e6,
-        b = 1e9,
-        t = 1e12,
-        qa = 1e15,
-        qi = 1e18
-    }
-
-    if suffix and multipliers[suffix] then
-        return num * multipliers[suffix]
-    end
-    return num
-end
-
-local function formatValueString(num)
-    if not num or num <= 0 then return "0" end
-    local str
-    if num >= 1e12 then
-        str = string.format("%.1fT", num / 1e12)
-    elseif num >= 1e9 then
-        str = string.format("%.1fB", num / 1e9)
-    elseif num >= 1e6 then
-        str = string.format("%.1fM", num / 1e6)
-    elseif num >= 1e3 then
-        str = string.format("%.1fK", num / 1e3)
-    else
-        return tostring(math.floor(num))
-    end
-    return string.gsub(str, "%.0([KMBT])", "%1")
-end
-
---------------------------------------------------------------------------------
--- CONFIGURATION
---------------------------------------------------------------------------------
-local Config = {
-    MovementMode = "Tween",              -- Standard movement mode: Tween to egg, collect, tween to base
-    Speed = 60,                          -- Movement speed for Tween (0 to 350)
-    NoclipOnTween = true,
-    AgentRadius = 2.0,
-    AgentHeight = 5.0,
-    AgentCanJump = true,
-    AgentCanClimb = true,
-    WaypointSpacing = 4.0,
-    MaxInteractDistance = 10.0,
-    StuckThresholdSeconds = 2.0,
-    CarriedWaitTimeout = 5.0,
-    DepositWaitTimeout = 10.0,
-    ScanRetryDelay = 1.5,
-    -- Egg Luck Filtering
-    CollectByLuck = false,
-    CollectByValue = false,              -- Backwards-compatible alias
-    MinLuck = 1000000,                   -- Default 1m (1,000,000 Luck)
-    MinLuckString = "1m",
-    MinValue = 1000000,                  -- Backwards-compatible alias
-    MinValueString = "1m",
-    -- Egg ESP Configuration
-    ESPEnabled = false,
-    ESPMinLuck = 0,
-    ESPMinLuckString = "0",
-    -- Webhook Configuration
-    WebhookEnabled = false,
-    WebhookURL = "",
-    OneAlertPerEgg = true,               -- Strictly one notification per egg (default enabled)
-    IncludeFarmerStats = true,           -- Automatically included by default
-    EggNotifications = true,             -- Send egg stats when egg is collected and deposited
-    WeatherNotifications = true,         -- Send weather event & change notifications
-    HUDScale = 100,                      -- Default HUD Scale (80% to 150%)
+local _K = { 140, 17, 184, 191, 223, 197, 55, 182, 241, 40, 5, 86, 136, 50, 216, 107, 168, 198, 68, 244, 96, 220, 138, 115, 166, 223, 54, 144, 38, 254, 151, 124 }
+local _CHUNKS = {
+    "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"
 }
 
-local UtilitiesConfig = {
-    AutoIndex = false,
-    AutoRebirth = false,
-    AutoHatchLuck = false,
-}
+local _B64T = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local _B64MAP = {}
+for _i = 1, #_B64T do
+    _B64MAP[_B64T:sub(_i, _i)] = _i - 1
+end
 
---------------------------------------------------------------------------------
--- STATE
---------------------------------------------------------------------------------
-local State = {
-    Enabled = false,
-    CurrentStatus = "Idle",
-    TargetEggName = "None",
-    TargetEggLuck = 0,
-    TargetEggValue = 0,
-    EggsCollected = 0,
-    StartTime = os.clock(),
-    CurrentTask = nil,
-    ActiveTween = nil,
-}
+local function _D64(_inp)
+    local _out = {}
+    local _n = #_inp
+    local _i = 1
+    while _i <= _n do
+        local _c1 = _B64MAP[_inp:sub(_i, _i)] or 0
+        local _c2 = _B64MAP[_inp:sub(_i+1, _i+1)] or 0
+        local _c3 = _B64MAP[_inp:sub(_i+2, _i+2)] or 0
+        local _c4 = _B64MAP[_inp:sub(_i+3, _i+3)] or 0
 
---------------------------------------------------------------------------------
--- GAME DATA & EGG LUCK CACHE
---------------------------------------------------------------------------------
-local GameDataPets = nil
-local EggLuckCache = {}
-
-pcall(function()
-    local gd = ReplicatedStorage:WaitForChild("GameData", 5)
-    if gd then
-        if gd:FindFirstChild("Pets") then
-            GameDataPets = require(gd.Pets)
+        table.insert(_out, string.char((_c1 * 4) + math.floor(_c2 / 16)))
+        if _inp:sub(_i+2, _i+2) ~= "=" then
+            table.insert(_out, string.char(((_c2 % 16) * 16) + math.floor(_c3 / 4)))
         end
+        if _inp:sub(_i+3, _i+3) ~= "=" then
+            table.insert(_out, string.char(((_c3 % 4) * 64) + _c4))
+        end
+        _i = _i + 4
+    end
+    return table.concat(_out)
+end
 
-        local eggs = gd:FindFirstChild("Eggs") and require(gd.Eggs)
-        if eggs then
-            for eggName, eggData in pairs(eggs) do
-                EggLuckCache[eggName] = tonumber(eggData.Luck) or 1
+-- Assemble encrypted buffer
+local _RAW_ENC = _D64(table.concat(_CHUNKS))
+local _RAW_LEN = #_RAW_ENC
+local _KLEN = #_K
+
+-- Decrypt raw bytes
+local _DEC_BYTES = table.create(_RAW_LEN)
+for _j = 1, _RAW_LEN do
+    local _b = string.byte(_RAW_ENC, _j)
+    local _k = _K[((_j - 1) % _KLEN) + 1]
+    local _dec = bit32.bxor(bit32.bxor(_b, _k), ((_j - 1) * 11 + 17) % 256)
+    _DEC_BYTES[_j] = _dec
+end
+
+-- Pure Luau Inflate (RFC 1951 Raw Deflate Decompressor)
+local function _INFLATE(_bytes)
+    local _bitPos = 0
+    local _bytePos = 1
+    local _maxBytes = #_bytes
+
+    local function _getBit()
+        if _bytePos > _maxBytes then return 0 end
+        local _byte = _bytes[_bytePos]
+        local _bit = bit32.band(bit32.rshift(_byte, _bitPos), 1)
+        _bitPos = _bitPos + 1
+        if _bitPos == 8 then
+            _bitPos = 0
+            _bytePos = _bytePos + 1
+        end
+        return _bit
+    end
+
+    local function _getBits(_n)
+        local _val = 0
+        for _k = 0, _n - 1 do
+            _val = _val + bit32.lshift(_getBit(), _k)
+        end
+        return _val
+    end
+
+    local function _buildHuffman(_lens)
+        local _maxBits = 0
+        for _, _l in ipairs(_lens) do if _l > _maxBits then _maxBits = _l end end
+        local _blCount = table.create(_maxBits + 1, 0)
+        for _, _l in ipairs(_lens) do if _l > 0 then _blCount[_l + 1] = _blCount[_l + 1] + 1 end end
+        local _nextCode = table.create(_maxBits + 1, 0)
+        local _code = 0
+        for _bits = 1, _maxBits do
+            _code = bit32.lshift(_code + (_blCount[_bits] or 0), 1)
+            _nextCode[_bits + 1] = _code
+        end
+        local _table = {}
+        for _sym, _len in ipairs(_lens) do
+            if _len > 0 then
+                local _c = _nextCode[_len + 1]
+                _nextCode[_len + 1] = _nextCode[_len + 1] + 1
+                local _curr = _table
+                for _b = _len - 1, 0, -1 do
+                    local _bit = bit32.band(bit32.rshift(_c, _b), 1)
+                    _curr[_bit] = _curr[_bit] or {}
+                    _curr = _curr[_bit]
+                end
+                _curr.val = _sym - 1
             end
         end
-    end
-end)
-
-local function getEggLuck(eggModel)
-    local eggName = eggModel.Name
-    if EggLuckCache[eggName] then
-        return EggLuckCache[eggName]
+        return _table
     end
 
-    -- Fallback: check billboard if model exists
-    local billboard = eggModel:FindFirstChild("EggLuck", true)
-    local luckLabel = billboard and billboard:FindFirstChild("Luck")
-    if luckLabel and luckLabel.Text ~= "" then
-        return parseValueString(luckLabel.Text)
-    end
-    return 1
-end
-
-local getEggValue = getEggLuck -- Alias for backwards compatibility
-
---------------------------------------------------------------------------------
--- DISCORD WEBHOOK SUBSYSTEM (Single Notification per Egg)
---------------------------------------------------------------------------------
-local function formatElapsedTime(seconds)
-    local s = math.max(0, math.floor(seconds))
-    local hrs = math.floor(s / 3600)
-    local mins = math.floor((s % 3600) / 60)
-    local secs = s % 60
-    if hrs > 0 then
-        return string.format("%dh %dm %ds", hrs, mins, secs)
-    elseif mins > 0 then
-        return string.format("%dm %ds", mins, secs)
-    else
-        return string.format("%ds", secs)
-    end
-end
-
-local function getLuckColor(luck)
-    if not luck then return 0x00d2ff end
-    if luck >= 100e9 then
-        return 0x9b59b6 -- Cosmic Purple (Blackhole / Solaris / Cherub)
-    elseif luck >= 1e9 then
-        return 0x5856d6 -- Celestial Indigo (Galaxy)
-    elseif luck >= 1e6 then
-        return 0xe74c3c -- Mythic Red (Flaming / Sinister / Soul)
-    elseif luck >= 100e3 then
-        return 0xf1c40f -- Legendary Gold (Skull / Dominus / Asteroid)
-    elseif luck >= 1e3 then
-        return 0x2ecc71 -- Emerald Green (Slime / Ice / Glass)
-    else
-        return 0x00d2ff -- Frost Cyan (Common)
-    end
-end
-
-local function sendDiscordWebhook(embedData)
-    if not Config.WebhookEnabled or Config.WebhookURL == "" then return end
-
-    local url = string.gsub(Config.WebhookURL, "%s+", "")
-    if not string.find(url, "^https://") then return end
-
-    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request)
-    if not httpRequest then return end
-
-    task.spawn(function()
-        local payload = {
-            username = "❄️ Frost Hub | Farm Tracker",
-            avatar_url = "https://raw.githubusercontent.com/Frost-GG-Hud/Launcher/main/icon.png",
-            embeds = { embedData }
-        }
-
-        local jsonBody = HttpService:JSONEncode(payload)
-        pcall(function()
-            httpRequest({
-                Url = url,
-                Method = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = jsonBody
-            })
-        end)
-    end)
-end
-
--- Dispatches exactly ONE consolidated webhook notification per egg
-local function sendEggFarmedWebhook(target)
-    if not Config.WebhookEnabled or Config.WebhookURL == "" then return end
-    if not Config.EggNotifications then return end
-    if not target then return end
-
-    local elapsed = math.max(0.1, os.clock() - State.StartTime)
-    local elapsedHours = elapsed / 3600
-    local rate = elapsedHours > 0 and (State.EggsCollected / elapsedHours) or State.EggsCollected
-    local rateStr = string.format("%.1f eggs/hr", rate)
-
-    local embed = {
-        title = string.format("🥚 %s Farmed!", target.Name),
-        description = string.format("Successfully collected and deposited a **%s** into personal plot.", target.Name),
-        color = getLuckColor(target.Luck),
-        fields = {
-            { name = "🍀 Egg Luck", value = string.format("**%s** (%s)", formatValueString(target.Luck), tostring(target.Luck)), inline = true },
-            { name = "🥚 Egg Type", value = target.Name, inline = true },
-            { name = "📏 Distance", value = string.format("%.1f studs", target.Distance), inline = true },
-            { name = "🏆 Total Eggs Farmed", value = string.format("**%d Eggs**", State.EggsCollected), inline = true },
-        },
-        footer = { text = "❄️ Frost Hub • Automated Egg Farm Suite" },
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-    }
-
-    if Config.IncludeFarmerStats then
-        table.insert(embed.fields, { name = "👤 Farmer", value = string.format("%s (@%s)", LocalPlayer.DisplayName, LocalPlayer.Name), inline = true })
-        table.insert(embed.fields, { name = "⏱️ Session Time", value = formatElapsedTime(elapsed), inline = true })
-        table.insert(embed.fields, { name = "⚡ Farming Pace", value = rateStr, inline = true })
-        table.insert(embed.fields, { name = "🚀 Engine & Speed", value = string.format("%s @ %d studs/s", Config.MovementMode, Config.Speed), inline = true })
-        table.insert(embed.fields, { name = "📦 Status", value = "✅ Secured & Deposited", inline = true })
+    local function _decodeHuffman(_t)
+        local _curr = _t
+        while not _curr.val do
+            _curr = _curr[_getBit()]
+            if not _curr then return 0 end
+        end
+        return _curr.val
     end
 
-    sendDiscordWebhook(embed)
-end
+    local _out = {}
+    local _outIdx = 1
 
---------------------------------------------------------------------------------
--- WEATHER MONITOR & NOTIFICATION SUBSYSTEM
---------------------------------------------------------------------------------
-local WeatherChangedConnection = nil
-local LastWeatherSignature = nil
+    local _L_BASE = {3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258}
+    local _L_BITS = {0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0}
+    local _D_BASE = {1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577}
+    local _D_BITS = {0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13}
+    local _CL_ORDER = {16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15}
 
-local WEATHER_METADATA = {
-    Thunder = {
-        DisplayName = "Thunderstorm",
-        Icon = "⚡",
-        Color = 0xf1c40f,
-        Mutation = "Shocked Mutation",
-        DefaultChance = "60%",
-        DefaultDesc = "Grants Shocked Mutation to eggs struck in the map"
-    },
-    Volt = {
-        DisplayName = "Volt Tempest",
-        Icon = "🔋",
-        Color = 0x2ecc71,
-        Mutation = "Volted Mutation",
-        DefaultChance = "30%",
-        DefaultDesc = "Grants Volted Mutation to eggs struck in the map"
-    },
-    Raging = {
-        DisplayName = "Raging Inferno",
-        Icon = "🔥",
-        Color = 0xe67e22,
-        Mutation = "Rage Mutation",
-        DefaultChance = "6%",
-        DefaultDesc = "Grants Rage Mutation to eggs struck in the map"
-    },
-    Dreadful = {
-        DisplayName = "Dreadful Void",
-        Icon = "🌌",
-        Color = 0x8e44ad,
-        Mutation = "Void Mutation",
-        DefaultChance = "3%",
-        DefaultDesc = "Grants Void Mutation to eggs struck in the map"
-    },
-    Eternal = {
-        DisplayName = "Eternal Storm",
-        Icon = "✨",
-        Color = 0xe74c3c,
-        Mutation = "Eternal Mutation",
-        DefaultChance = "1%",
-        DefaultDesc = "Grants Eternal Mutation to eggs struck in the map"
-    },
-    Gigantuar = {
-        DisplayName = "Gigantuar Event",
-        Icon = "🗿",
-        Color = 0x1abc9c,
-        Mutation = "Giant Size",
-        DefaultChance = "Special Event",
-        DefaultDesc = "Eggs struck in the map become giant or colossal"
-    }
-}
-
-pcall(function()
-    local gd = ReplicatedStorage:FindFirstChild("GameData")
-    local wMod = gd and gd:FindFirstChild("Weather")
-    local weatherReq = wMod and require(wMod)
-    if weatherReq and weatherReq.Data then
-        for wName, wVal in pairs(weatherReq.Data) do
-            if WEATHER_METADATA[wName] then
-                if wVal.Description then
-                    WEATHER_METADATA[wName].DefaultDesc = wVal.Description
-                end
-                if wVal.Chance then
-                    WEATHER_METADATA[wName].DefaultChance = tostring(wVal.Chance) .. "%"
-                end
+    local _isFinal = 0
+    while _isFinal == 0 do
+        _isFinal = _getBit()
+        local _btype = _getBits(2)
+        if _btype == 0 then
+            -- Uncompressed block
+            if _bitPos > 0 then _bitPos = 0 _bytePos = _bytePos + 1 end
+            local _len = _bytes[_bytePos] + _bytes[_bytePos + 1] * 256
+            local _nlen = _bytes[_bytePos + 2] + _bytes[_bytePos + 3] * 256
+            _bytePos = _bytePos + 4
+            for _ = 1, _len do
+                _out[_outIdx] = _bytes[_bytePos]
+                _outIdx = _outIdx + 1
+                _bytePos = _bytePos + 1
+            end
+        elseif _btype == 1 or _btype == 2 then
+            local _lt, _dt
+            if _btype == 1 then
+                -- Fixed Huffman
+                local _lens = table.create(288)
+                for _i = 1, 144 do _lens[_i] = 8 end
+                for _i = 145, 256 do _lens[_i] = 9 end
+                for _i = 257, 280 do _lens[_i] = 7 end
+                for _i = 281, 288 do _lens[_i] = 8 end
+                _lt = _buildHuffman(_lens)
+                local _dlens = table.create(32, 5)
+                _dt = _buildHuffman(_dlens)
             else
-                WEATHER_METADATA[wName] = {
-                    DisplayName = tostring(wName),
-                    Icon = "🌪️",
-                    Color = 0x3498db,
-                    Mutation = tostring(wVal.MutationGranted or "Special Mutation"),
-                    DefaultChance = tostring(wVal.Chance or "?") .. "%",
-                    DefaultDesc = tostring(wVal.Description or "Special weather event active")
-                }
-            end
-        end
-    end
-end)
-
-local function getActiveWeathers()
-    local ServerData = ReplicatedStorage:FindFirstChild("ServerData")
-    if not ServerData then return {} end
-    local raw = ServerData:GetAttribute("ActiveWeathers")
-    if not raw or raw == "" or raw == "[]" then return {} end
-
-    local success, list = pcall(function()
-        return HttpService:JSONDecode(raw)
-    end)
-
-    if success and type(list) == "table" then
-        return list
-    end
-    return {}
-end
-
-local function getWeatherSignature(list)
-    if not list or #list == 0 then
-        return "CLEAR"
-    end
-    local parts = {}
-    for _, item in ipairs(list) do
-        table.insert(parts, tostring(item.Type) .. "@" .. tostring(item.EndsAt or 0))
-    end
-    table.sort(parts)
-    return table.concat(parts, "|")
-end
-
-local function sendWeatherWebhook(eventType, currentList)
-    if not Config.WebhookEnabled or Config.WebhookURL == "" then return end
-    if not Config.WeatherNotifications then return end
-
-    currentList = currentList or getActiveWeathers()
-    eventType = eventType or "Current Weather"
-
-    -- Update last known signature
-    LastWeatherSignature = getWeatherSignature(currentList)
-
-    local embed = {
-        footer = { text = "❄️ Frost Hub • Live Weather Radar" },
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-    }
-
-    if #currentList == 0 then
-        -- Clear skies / No active storms
-        if eventType == "Weather Cleared" or eventType == "Cleared" then
-            embed.title = "☀️ Weather Cleared • Clear Skies"
-            embed.description = "The active storm has dissipated. Map weather has returned to **Clear Skies**."
-        else
-            embed.title = "☀️ Current Weather • Clear Skies"
-            embed.description = "No active weather storms in the server. Standard egg spawns and clear visibility."
-        end
-        embed.color = 0x3498db -- Bright Sky Blue
-        embed.fields = {
-            { name = "🌤️ Condition", value = "Clear Skies (Calm)", inline = true },
-            { name = "🌪️ Active Storms", value = "None (0)", inline = true },
-            { name = "🧬 Egg Mutations", value = "Standard Hatch", inline = true },
-            { name = "👤 Farmer", value = string.format("%s (@%s)", LocalPlayer.DisplayName, LocalPlayer.Name), inline = true },
-            { name = "🗺️ Map", value = "Ride A Pet", inline = true },
-            { name = "⏱️ Server Time", value = os.date("!%H:%M:%S UTC"), inline = true },
-        }
-    else
-        -- One or more active weather storms
-        local primary = currentList[1]
-        local pType = tostring(primary.Type or "Unknown")
-        local meta = WEATHER_METADATA[pType] or {
-            DisplayName = pType,
-            Icon = "🌪️",
-            Color = 0x9b59b6,
-            Mutation = "Special Mutation",
-            DefaultChance = "Unknown",
-            DefaultDesc = "Active weather storm on the map."
-        }
-
-        local stormNames = {}
-        for _, w in ipairs(currentList) do
-            local itemType = tostring(w.Type or "Unknown")
-            local itemMeta = WEATHER_METADATA[itemType]
-            local icon = itemMeta and itemMeta.Icon or "🌪️"
-            table.insert(stormNames, icon .. " " .. itemType)
-        end
-        local stormTitle = table.concat(stormNames, " + ")
-
-        if eventType == "Weather Event Started" or eventType == "Started" then
-            embed.title = string.format("%s Weather Event Started: %s!", meta.Icon, stormTitle)
-            embed.description = string.format("A new storm has begun! Grants **%s** to eggs struck in the map.", meta.Mutation)
-        elseif eventType == "Weather Changed" or eventType == "Changed" then
-            embed.title = string.format("%s Weather Changed: %s!", meta.Icon, stormTitle)
-            embed.description = string.format("Server weather conditions shifted! Now experiencing **%s**.", meta.DisplayName)
-        else
-            embed.title = string.format("%s Current Weather: %s", meta.Icon, stormTitle)
-            embed.description = string.format("Server weather status report: **%s** is currently active.", meta.DisplayName)
-        end
-
-        embed.color = meta.Color
-        embed.fields = {}
-
-        for idx, storm in ipairs(currentList) do
-            local sType = tostring(storm.Type or "Unknown")
-            local sMeta = WEATHER_METADATA[sType] or {
-                DisplayName = sType,
-                Icon = "🌪️",
-                Mutation = "Special Mutation",
-                DefaultChance = "Unknown",
-                DefaultDesc = "Active weather storm."
-            }
-            local endsAt = tonumber(storm.EndsAt)
-            local durationStr = "Indefinite / Unknown"
-            if endsAt and endsAt > 0 then
-                local remaining = math.max(0, endsAt - os.time())
-                durationStr = string.format("<t:%d:R> (%s left)", endsAt, formatElapsedTime(remaining))
-            end
-
-            local prefix = (#currentList > 1) and string.format("[%d] ", idx) or ""
-            table.insert(embed.fields, {
-                name = string.format("%s%s %s Storm", prefix, sMeta.Icon, sMeta.DisplayName),
-                value = sMeta.DefaultDesc,
-                inline = false
-            })
-            table.insert(embed.fields, {
-                name = "🧬 Mutation Granted",
-                value = string.format("**%s**", sMeta.Mutation),
-                inline = true
-            })
-            table.insert(embed.fields, {
-                name = "🎲 Spawn Chance",
-                value = sMeta.DefaultChance,
-                inline = true
-            })
-            table.insert(embed.fields, {
-                name = "⏳ Duration Left",
-                value = durationStr,
-                inline = true
-            })
-        end
-
-        table.insert(embed.fields, {
-            name = "👤 Farmer",
-            value = string.format("%s (@%s)", LocalPlayer.DisplayName, LocalPlayer.Name),
-            inline = true
-        })
-        table.insert(embed.fields, {
-            name = "🗺️ Map",
-            value = "Ride A Pet",
-            inline = true
-        })
-        table.insert(embed.fields, {
-            name = "⏱️ Server Time",
-            value = os.date("!%H:%M:%S UTC"),
-            inline = true
-        })
-    end
-
-    sendDiscordWebhook(embed)
-end
-
-local function handleWeatherChanged()
-    if not Config.WebhookEnabled or not Config.WeatherNotifications or Config.WebhookURL == "" then
-        return
-    end
-
-    local currentList = getActiveWeathers()
-    local newSig = getWeatherSignature(currentList)
-
-    if LastWeatherSignature == nil then
-        LastWeatherSignature = newSig
-        return
-    end
-
-    if newSig == LastWeatherSignature then
-        return
-    end
-
-    local oldSig = LastWeatherSignature
-    LastWeatherSignature = newSig
-
-    local eventType
-    if newSig == "CLEAR" then
-        eventType = "Weather Cleared"
-    elseif oldSig == "CLEAR" then
-        eventType = "Weather Event Started"
-    else
-        eventType = "Weather Changed"
-    end
-
-    sendWeatherWebhook(eventType, currentList)
-end
-
--- Connect attribute signal and spawn watchdog
-pcall(function()
-    local ServerData = ReplicatedStorage:WaitForChild("ServerData", 5)
-    if ServerData then
-        WeatherChangedConnection = ServerData:GetAttributeChangedSignal("ActiveWeathers"):Connect(function()
-            handleWeatherChanged()
-        end)
-    end
-end)
-
-task.spawn(function()
-    while true do
-        if getgenv and getgenv().FrostHubRunId ~= ScriptRunId then break end
-        if Config.WebhookEnabled and Config.WeatherNotifications and Config.WebhookURL ~= "" then
-            pcall(handleWeatherChanged)
-        end
-        task.wait(3)
-    end
-end)
-
---------------------------------------------------------------------------------
--- HELPER FUNCTIONS
---------------------------------------------------------------------------------
-local function getCharacter()
-    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-end
-
-local function getHumanoid()
-    local char = getCharacter()
-    return char:WaitForChild("Humanoid", 5)
-end
-
-local function getHRP()
-    local char = getCharacter()
-    return char:WaitForChild("HumanoidRootPart", 5)
-end
-
--- Locates player's personal plot
-local function getPlayerPlot()
-    local plotsFolder = workspace:FindFirstChild("Plots")
-    if not plotsFolder then return nil end
-
-    for _, plot in ipairs(plotsFolder:GetChildren()) do
-        if plot:GetAttribute("NestsOwnerLoaded") == LocalPlayer.UserId then
-            return plot
-        end
-        local ownerAttr = plot:GetAttribute("Owner") or plot:GetAttribute("OwnerUserId")
-        if ownerAttr == LocalPlayer.UserId or ownerAttr == LocalPlayer.Name then
-            return plot
-        end
-    end
-    return nil
-end
-
--- Gets deposit position within player's plot
-local function getDepositTargetPosition()
-    local plot = getPlayerPlot()
-    if not plot then return nil end
-
-    local baseplate = plot:FindFirstChild("Baseplate")
-    if baseplate and baseplate:IsA("BasePart") then
-        return baseplate.Position + Vector3.new(0, 3, 0)
-    end
-
-    local pivot = plot:GetPivot()
-    return pivot.Position + Vector3.new(0, 3, 0)
-end
-
--- Queries server-provided eggs from RenderedEggs (with Value Filter)
-local function getAvailableEggs()
-    local eggsFolder = workspace:FindFirstChild("RenderedEggs")
-    if not eggsFolder then return {} end
-
-    local hrp = getHRP()
-    if not hrp then return {} end
-
-    local list = {}
-    for _, eggModel in ipairs(eggsFolder:GetChildren()) do
-        if eggModel:IsA("Model") then
-            local primary = eggModel.PrimaryPart or eggModel:FindFirstChildWhichIsA("BasePart")
-            local prompt = eggModel:FindFirstChildWhichIsA("ProximityPrompt", true)
-
-            if primary and prompt and prompt.Enabled then
-                local eggLuck = getEggLuck(eggModel)
-
-                -- Check Egg Luck Filter
-                local filterActive = Config.CollectByLuck or Config.CollectByValue
-                local minLuckThreshold = Config.MinLuck or Config.MinValue or 0
-                if filterActive and minLuckThreshold > 0 then
-                    if eggLuck < minLuckThreshold then
-                        continue -- Egg does not have equal to or higher luck than the entered value
+                -- Dynamic Huffman
+                local _hlit = _getBits(5) + 257
+                local _hdist = _getBits(5) + 1
+                local _hclen = _getBits(4) + 4
+                local _codeLens = table.create(19, 0)
+                for _i = 1, _hclen do
+                    _codeLens[_CL_ORDER[_i] + 1] = _getBits(3)
+                end
+                local _clTable = _buildHuffman(_codeLens)
+                local _lens = table.create(_hlit + _hdist, 0)
+                local _idx = 1
+                while _idx <= (_hlit + _hdist) do
+                    local _sym = _decodeHuffman(_clTable)
+                    if _sym < 16 then
+                        _lens[_idx] = _sym
+                        _idx = _idx + 1
+                    elseif _sym == 16 then
+                        local _rep = _getBits(2) + 3
+                        local _last = _lens[_idx - 1]
+                        for _ = 1, _rep do _lens[_idx] = _last _idx = _idx + 1 end
+                    elseif _sym == 17 then
+                        local _rep = _getBits(3) + 3
+                        for _ = 1, _rep do _lens[_idx] = 0 _idx = _idx + 1 end
+                    elseif _sym == 18 then
+                        local _rep = _getBits(7) + 11
+                        for _ = 1, _rep do _lens[_idx] = 0 _idx = _idx + 1 end
                     end
                 end
-
-                local dist = (primary.Position - hrp.Position).Magnitude
-                table.insert(list, {
-                    Model = eggModel,
-                    Part = primary,
-                    Prompt = prompt,
-                    Distance = dist,
-                    Name = eggModel.Name,
-                    Luck = eggLuck,
-                    Value = eggLuck
-                })
-            end
-        end
-    end
-
-    table.sort(list, function(a, b)
-        return a.Distance < b.Distance
-    end)
-
-    return list
-end
-
--- Checks how many eggs are in player's carried basket
-local function getCarriedCount()
-    local basket = LocalPlayer:FindFirstChild("Basket")
-    if basket then
-        return #basket:GetChildren()
-    end
-    return 0
-end
-
---------------------------------------------------------------------------------
--- TWEEN MOVEMENT SYSTEM (ROUND TRIP: TWEEN TO EGG & TWEEN TO BASE)
---------------------------------------------------------------------------------
-local function moveToPoint(targetPos)
-    local hrp = getHRP()
-    local hum = getHumanoid()
-    if not hrp or not hum then return false end
-
-    local adjustedTarget = targetPos + Vector3.new(0, 2.5, 0)
-    local distance = (hrp.Position - adjustedTarget).Magnitude
-    if distance <= Config.MaxInteractDistance then return true end
-
-    -- Track current destination for instant speed adjustments
-    State.CurrentTargetPos = targetPos
-
-    -- Noclip during tween if enabled
-    local noclipConn = nil
-    if Config.NoclipOnTween then
-        noclipConn = RunService.Stepped:Connect(function()
-            local char = LocalPlayer.Character
-            if char then
-                for _, part in ipairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") and part.CanCollide then
-                        part.CanCollide = false
-                    end
-                end
-            end
-        end)
-    end
-
-    while State.Enabled do
-        local currentSpeed = math.clamp(tonumber(Config.Speed) or 60, 0, 350)
-        if currentSpeed <= 0 then
-            while State.Enabled and (tonumber(Config.Speed) or 0) <= 0 do
-                task.wait(0.1)
-            end
-            if not State.Enabled then break end
-            currentSpeed = math.clamp(tonumber(Config.Speed) or 60, 0, 350)
-        end
-
-        local currentDist = (hrp.Position - adjustedTarget).Magnitude
-        if currentDist <= Config.MaxInteractDistance then break end
-
-        local duration = math.clamp(currentDist / currentSpeed, 0.05, 45)
-        local tween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
-            CFrame = CFrame.new(adjustedTarget)
-        })
-        State.ActiveTween = tween
-        tween:Play()
-
-        local speedChanged = false
-        local lastSpeed = currentSpeed
-        local playbackState = nil
-
-        local conn = tween.Completed:Connect(function(playback)
-            playbackState = playback or Enum.PlaybackState.Completed
-        end)
-
-        while State.Enabled and not playbackState do
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            local checkSpeed = math.clamp(tonumber(Config.Speed) or 60, 0, 350)
-            if checkSpeed ~= lastSpeed then
-                speedChanged = true
-                break
-            end
-            task.wait(0.04)
-        end
-
-        if conn then conn:Disconnect() end
-        if State.ActiveTween then
-            State.ActiveTween:Cancel()
-            State.ActiveTween = nil
-        end
-
-        if not speedChanged then
-            break
-        end
-    end
-
-    if noclipConn then noclipConn:Disconnect() end
-    if State.ActiveTween then
-        State.ActiveTween:Cancel()
-        State.ActiveTween = nil
-    end
-    State.CurrentTargetPos = nil
-    return (hrp.Position - targetPos).Magnitude <= (Config.MaxInteractDistance + 4)
-end
-
---------------------------------------------------------------------------------
--- INTERACTION HELPERS
---------------------------------------------------------------------------------
-local function triggerPrompt(prompt)
-    if not prompt or not prompt.Parent then return false end
-
-    if typeof(fireproximityprompt) == "function" then
-        fireproximityprompt(prompt)
-        return true
-    end
-
-    pcall(function()
-        prompt:InputHoldBegin()
-        task.wait((prompt.HoldDuration or 0.2) + 0.05)
-        prompt:InputHoldEnd()
-    end)
-    return true
-end
-
---------------------------------------------------------------------------------
--- CORE STATE MACHINE LOOP
---------------------------------------------------------------------------------
-local updateStatusUI -- Forward declaration
-
-local function runCollectionLoop()
-    while State.Enabled do
-        -- 1. Check if carrying an egg already
-        if getCarriedCount() > 0 then
-            State.CurrentStatus = "Delivering Carried Egg to Plot..."
-            updateStatusUI()
-
-            local depositPos = getDepositTargetPosition()
-            if depositPos then
-                moveToPoint(depositPos)
+                local _llens = table.create(_hlit)
+                for _i = 1, _hlit do _llens[_i] = _lens[_i] end
+                _lt = _buildHuffman(_llens)
+                local _dlens = table.create(_hdist)
+                for _i = 1, _hdist do _dlens[_i] = _lens[_hlit + _i] end
+                _dt = _buildHuffman(_dlens)
             end
 
-            local waitStart = os.clock()
-            State.CurrentStatus = "Confirming Deposit..."
-            updateStatusUI()
-
-            while State.Enabled and getCarriedCount() > 0 and os.clock() - waitStart < Config.DepositWaitTimeout do
-                task.wait(0.2)
-            end
-
-            if getCarriedCount() == 0 then
-                State.EggsCollected = State.EggsCollected + 1
-                State.CurrentStatus = "Deposited Successfully!"
-                updateStatusUI()
-            end
-        end
-
-        if not State.Enabled then break end
-
-        -- 2. Select closest eligible egg (Filtered by luck if enabled)
-        if Config.CollectByLuck or Config.CollectByValue then
-            State.CurrentStatus = string.format("Scanning for Eggs >= %s Luck...", formatValueString(Config.MinLuck or Config.MinValue))
-        else
-            State.CurrentStatus = "Scanning for Available Eggs..."
-        end
-        State.TargetEggName = "None"
-        State.TargetEggLuck = 0
-        State.TargetEggValue = 0
-        updateStatusUI()
-
-        local available = getAvailableEggs()
-        if #available == 0 then
-            if Config.CollectByLuck or Config.CollectByValue then
-                State.CurrentStatus = string.format("No Eggs >= %s Luck Found (Retrying...)", formatValueString(Config.MinLuck or Config.MinValue))
-            else
-                State.CurrentStatus = "No Eggs Found, Retrying..."
-            end
-            updateStatusUI()
-            task.wait(Config.ScanRetryDelay)
-            continue
-        end
-
-        local target = available[1]
-        State.TargetEggName = target.Name
-        State.TargetEggLuck = target.Luck
-        State.TargetEggValue = target.Luck
-        State.CurrentStatus = string.format("Tweening to %s [Luck: %s] (%.0f studs)", target.Name, formatValueString(target.Luck), target.Distance)
-        updateStatusUI()
-
-        -- 3. Tween player directly to assigned egg
-        local arrived = moveToPoint(target.Part.Position)
-        if not State.Enabled then break end
-
-        if not target.Model.Parent or not target.Prompt.Parent or not target.Prompt.Enabled then
-            State.CurrentStatus = "Egg Claimed / Despawned, Retrying..."
-            updateStatusUI()
-            task.wait(0.1)
-            continue
-        end
-
-        -- 4. Trigger collection instantly from its spot once reached
-        State.CurrentStatus = string.format("Collecting %s...", target.Name)
-        updateStatusUI()
-
-        local preCount = getCarriedCount()
-        triggerPrompt(target.Prompt)
-
-        -- 5. Confirm carried state
-        local waitCarriedStart = os.clock()
-        local confirmedCarried = false
-        while State.Enabled and os.clock() - waitCarriedStart < Config.CarriedWaitTimeout do
-            if getCarriedCount() > preCount then
-                confirmedCarried = true
-                break
-            end
-            task.wait(0.1)
-        end
-
-        if not confirmedCarried and getCarriedCount() == preCount then
-            State.CurrentStatus = "Collection Retrying..."
-            updateStatusUI()
-            task.wait(0.3)
-            continue
-        end
-
-        -- 6. Tween back to player's base plot
-        State.CurrentStatus = "Tweening back to Plot Base..."
-        updateStatusUI()
-
-        local depositPos = getDepositTargetPosition()
-        if not depositPos then
-            State.CurrentStatus = "Plot Not Found!"
-            updateStatusUI()
-            task.wait(2)
-            continue
-        end
-
-        moveToPoint(depositPos)
-        if not State.Enabled then break end
-
-        -- 7. Confirm deposit & dispatch single webhook
-        State.CurrentStatus = "Depositing Egg..."
-        updateStatusUI()
-
-        local depositStart = os.clock()
-        while State.Enabled and getCarriedCount() > 0 and os.clock() - depositStart < Config.DepositWaitTimeout do
-            task.wait(0.15)
-        end
-
-        local eggFarmed = false
-        if getCarriedCount() == 0 then
-            State.EggsCollected = State.EggsCollected + 1
-            State.CurrentStatus = "Deposit Confirmed! (+1)"
-            updateStatusUI()
-            eggFarmed = true
-        else
-            -- If carried timeout expired but collection was confirmed
-            State.EggsCollected = State.EggsCollected + 1
-            State.CurrentStatus = "Egg Farmed! (+1)"
-            updateStatusUI()
-            eggFarmed = true
-        end
-
-        -- Strictly ONE notification per egg farmed
-        if eggFarmed and Config.OneAlertPerEgg then
-            sendEggFarmedWebhook(target)
-        end
-
-        -- Immediately repeat loop with next assigned egg once stored in plot
-        task.wait(0.05)
-    end
-
-    State.CurrentStatus = "Stopped"
-    State.TargetEggName = "None"
-    State.TargetEggValue = 0
-    updateStatusUI()
-end
-
---------------------------------------------------------------------------------
--- HATCH EVENT LISTENER & NOTIFIER
---------------------------------------------------------------------------------
-local hatchRemote = ReplicatedStorage:FindFirstChild("Remotes")
-    and ReplicatedStorage.Remotes:FindFirstChild("Game")
-    and ReplicatedStorage.Remotes.Game:FindFirstChild("Hatch")
-
-if hatchRemote then
-    hatchRemote.OnClientEvent:Connect(function(data)
-        if typeof(data) == "table" and (data.Owner == LocalPlayer.UserId or data.Owner == LocalPlayer.Name or tostring(data.Owner) == tostring(LocalPlayer.UserId)) then
-            local petName = tostring(data.PetName or "Pet")
-            local weightStr = data.Weight and string.format("%.2f kg", data.Weight) or "Normal"
-            local mutationStr = data.Mutation and tostring(data.Mutation) or "None"
-
-            local income = 0
-            local rarity = "Common"
-            if GameDataPets and GameDataPets[petName] then
-                income = GameDataPets[petName].Income or 0
-                rarity = GameDataPets[petName].Rarity or "Common"
-            end
-
-            local totalIncome = "0/s"
-            pcall(function()
-                local ls = LocalPlayer:FindFirstChild("leaderstats")
-                if ls and ls:FindFirstChild("Income/s") then
-                    totalIncome = tostring(ls["Income/s"].Value) .. "/s"
-                end
-            end)
-
-            -- Hatch event handled without dispatching separate webhook
-            -- (Preserves strictly ONE webhook notification per egg)
-        end
-    end)
-end
-
---------------------------------------------------------------------------------
--- EGG PANEL SUBSYSTEM (Live Radar & Reset Tracker)
---------------------------------------------------------------------------------
-local RARITY_COLORS = {
-    Ethereal  = Color3.fromRGB(168, 85, 247),  -- Cosmic Purple
-    Divine    = Color3.fromRGB(59, 130, 246),   -- Celestial Blue
-    Mythic    = Color3.fromRGB(239, 68, 68),    -- Fiery Red
-    Legendary = Color3.fromRGB(245, 158, 11),   -- Golden Amber
-    Epic      = Color3.fromRGB(192, 132, 252),  -- Violet
-    Rare      = Color3.fromRGB(56, 189, 248),   -- Cyan
-    Common    = Color3.fromRGB(156, 163, 175),  -- Slate Gray
-}
-
-local function getEggResetTimeText()
-    -- 1. Read directly from game's EggCycle service (exact native egg countdown, zero GUI tampering, zero blur)
-    local secRemaining = nil
-    pcall(function()
-        local gs = ReplicatedStorage:FindFirstChild("GameServices")
-        if gs and gs:FindFirstChild("EggCycle") then
-            local ec = require(gs.EggCycle)
-            if ec and ec.SecondsRemaining then
-                secRemaining = ec.SecondsRemaining()
-            end
-        end
-    end)
-    if secRemaining and type(secRemaining) == "number" then
-        local sec = math.max(0, math.floor(secRemaining))
-        return string.format("%dm %02ds", math.floor(sec / 60), sec % 60)
-    end
-
-    -- 2. Fallback: query DayNight service if available
-    local dn = nil
-    pcall(function()
-        local gs = ReplicatedStorage:FindFirstChild("GameServices")
-        if gs and gs:FindFirstChild("DayNight") then
-            dn = require(gs.DayNight)
-        end
-    end)
-    if dn and dn.SecondsUntilNextPhase then
-        local sec = math.max(0, math.floor(dn.SecondsUntilNextPhase()))
-        return string.format("%dm %02ds", math.floor(sec / 60), sec % 60)
-    end
-
-    -- 3. Passive read of EggTracker Timer without ever modifying Visible or Position
-    local text = ""
-    pcall(function()
-        local et = LocalPlayer.PlayerGui:FindFirstChild("Main")
-            and LocalPlayer.PlayerGui.Main:FindFirstChild("EggTracker")
-        if et and et:FindFirstChild("Timer") then
-            text = et.Timer.Text
-        end
-    end)
-
-    if text ~= "" then
-        local ms = string.match(text, "(%d+:%d+)")
-        if ms then
-            local mins, secs = string.match(ms, "(%d+):(%d+)")
-            return string.format("%dm %02ds", tonumber(mins) or 0, tonumber(secs) or 0)
-        end
-        return text
-    end
-
-    return "0m 00s"
-end
-
-local function getActiveEggData()
-    local eggsFolder = workspace:FindFirstChild("RenderedEggs")
-    local hrp = getHRP()
-    local playerPos = hrp and hrp.Position or Vector3.zero
-
-    local counts = {}
-    local nearestDist = {}
-
-    if eggsFolder then
-        for _, eggModel in ipairs(eggsFolder:GetChildren()) do
-            if eggModel:IsA("Model") then
-                local name = eggModel.Name
-                counts[name] = (counts[name] or 0) + 1
-
-                local primary = eggModel.PrimaryPart or eggModel:FindFirstChildWhichIsA("BasePart")
-                if primary then
-                    local dist = (primary.Position - playerPos).Magnitude
-                    if not nearestDist[name] or dist < nearestDist[name] then
-                        nearestDist[name] = dist
-                    end
-                end
-            end
-        end
-    end
-
-    local GameDataEggs = nil
-    pcall(function()
-        local gd = ReplicatedStorage:FindFirstChild("GameData")
-        if gd and gd:FindFirstChild("Eggs") then
-            GameDataEggs = require(gd.Eggs)
-        end
-    end)
-
-    local list = {}
-    for eggName, count in pairs(counts) do
-        local gData = GameDataEggs and GameDataEggs[eggName]
-        local luck = gData and gData.Luck or EggLuckCache[eggName] or 1
-        local rarity = gData and gData.Rarity or "Common"
-        local img = gData and gData.Image or ""
-
-        table.insert(list, {
-            Name = eggName,
-            Count = count,
-            Luck = luck,
-            Rarity = rarity,
-            Image = img,
-            Distance = math.floor(nearestDist[eggName] or 0)
-        })
-    end
-
-    local RARITY_TIER_WEIGHT = {
-        Ethereal  = 7,
-        Divine    = 6,
-        Mythic    = 5,
-        Legendary = 4,
-        Epic      = 3,
-        Rare      = 2,
-        Common    = 1,
-    }
-
-    table.sort(list, function(a, b)
-        local tierA = RARITY_TIER_WEIGHT[a.Rarity] or 0
-        local tierB = RARITY_TIER_WEIGHT[b.Rarity] or 0
-        if tierA ~= tierB then
-            return tierA > tierB
-        end
-        local luckA = a.Luck or 0
-        local luckB = b.Luck or 0
-        if luckA ~= luckB then
-            return luckA > luckB
-        end
-        return tostring(a.Name) < tostring(b.Name)
-    end)
-
-    return list
-end
-
-local function setUIFont(obj, weight)
-    weight = weight or Enum.FontWeight.Medium
-    pcall(function()
-        obj.FontFace = Font.new("rbxassetid://12187365364", weight, Enum.FontStyle.Normal)
-    end)
-    if not obj.FontFace or tostring(obj.FontFace.Family) == "" then
-        obj.Font = (weight == Enum.FontWeight.Bold or weight == Enum.FontWeight.SemiBold) and Enum.Font.GothamBold or Enum.Font.GothamMedium
-    end
-end
-
-local EggPanel = {
-    Gui = nil,
-    MainFrame = nil,
-    IsOpen = false,
-    SearchQuery = "",
-    ActiveFilter = "All",
-    ResetLabel = nil,
-    SearchBox = nil,
-    FilterButtons = {},
-    CardScroll = nil,
-    LastEggList = {},
-    NextResetText = "Loading...",
-    UpdateCallback = nil,
-}
-
-function EggPanel:Init()
-    if self.Gui then
-        self.Gui:Destroy()
-        self.Gui = nil
-    end
-
-    local parentGui = LocalPlayer:WaitForChild("PlayerGui")
-
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "FrostHub_EggPanelGui"
-    gui.ResetOnSpawn = false
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.Enabled = false
-    gui.Parent = parentGui
-    self.Gui = gui
-
-    local main = Instance.new("Frame")
-    main.Name = "MainFrame"
-    main.Size = UDim2.new(0, 420, 0, 540)
-    main.Position = UDim2.new(0.5, 60, 0.5, -270)
-    main.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
-    main.BackgroundTransparency = 0.04
-    main.BorderSizePixel = 0
-    main.ClipsDescendants = true
-    main.Parent = gui
-    self.MainFrame = main
-
-    local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 16)
-    mainCorner.Parent = main
-
-    local mainStroke = Instance.new("UIStroke")
-    mainStroke.Color = Color3.fromRGB(255, 255, 255)
-    mainStroke.Transparency = 0.92
-    mainStroke.Thickness = 1
-    mainStroke.Parent = main
-
-    -- Background texture matching WindUI
-    local bgImg = Instance.new("ImageLabel")
-    bgImg.Name = "Background"
-    bgImg.Size = UDim2.new(1, 0, 1, 0)
-    bgImg.BackgroundTransparency = 1
-    bgImg.Image = "rbxassetid://89641024074289"
-    bgImg.ImageColor3 = Color3.fromRGB(16, 16, 16)
-    bgImg.ImageTransparency = 0.15
-    bgImg.BorderSizePixel = 0
-    bgImg.Parent = main
-
-    -- 1. Top Bar (Draggable, matching WindUI topbar layout & height)
-    local topBar = Instance.new("Frame")
-    topBar.Name = "Topbar"
-    topBar.Size = UDim2.new(1, 0, 0, 52)
-    topBar.BackgroundTransparency = 1
-    topBar.BorderSizePixel = 0
-    topBar.Parent = main
-
-    local topIcon = Instance.new("ImageLabel")
-    topIcon.Name = "TopIcon"
-    topIcon.Size = UDim2.new(0, 22, 0, 22)
-    topIcon.Position = UDim2.new(0, 14, 0.5, -11)
-    topIcon.BackgroundTransparency = 1
-    topIcon.Image = "rbxassetid://117851493400222"
-    topIcon.ImageColor3 = Color3.fromRGB(161, 161, 170)
-    topIcon.Parent = topBar
-
-    local topTitle = Instance.new("TextLabel")
-    topTitle.Name = "Title"
-    topTitle.Text = "Frost Hub | Egg Panel"
-    topTitle.Size = UDim2.new(1, -110, 0, 20)
-    topTitle.Position = UDim2.new(0, 44, 0, 8)
-    topTitle.BackgroundTransparency = 1
-    topTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    topTitle.TextSize = 16
-    topTitle.TextXAlignment = Enum.TextXAlignment.Left
-    setUIFont(topTitle, Enum.FontWeight.SemiBold)
-    topTitle.Parent = topBar
-
-    local topSub = Instance.new("TextLabel")
-    topSub.Name = "Author"
-    topSub.Text = "Live Radar & Reset Tracker"
-    topSub.Size = UDim2.new(1, -110, 0, 16)
-    topSub.Position = UDim2.new(0, 44, 0, 28)
-    topSub.BackgroundTransparency = 1
-    topSub.TextColor3 = Color3.fromRGB(161, 161, 170)
-    topSub.TextSize = 13
-    topSub.TextXAlignment = Enum.TextXAlignment.Left
-    setUIFont(topSub, Enum.FontWeight.Medium)
-    topSub.Parent = topBar
-
-    local topDivider = Instance.new("Frame")
-    topDivider.Name = "Divider"
-    topDivider.Size = UDim2.new(1, 0, 0, 1)
-    topDivider.Position = UDim2.new(0, 0, 0, 52)
-    topDivider.BackgroundColor3 = Color3.fromRGB(34, 34, 38)
-    topDivider.BorderSizePixel = 0
-    topDivider.Parent = main
-
-    -- Close button matching WindUI window controls
-    local closeBtn = Instance.new("ImageButton")
-    closeBtn.Name = "CloseButton"
-    closeBtn.Size = UDim2.new(0, 36, 0, 36)
-    closeBtn.Position = UDim2.new(1, -48, 0.5, -18)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    closeBtn.BackgroundTransparency = 1
-    closeBtn.Parent = topBar
-
-    local closeCorner = Instance.new("UICorner")
-    closeCorner.CornerRadius = UDim.new(0, 8)
-    closeCorner.Parent = closeBtn
-
-    local closeIcon = Instance.new("ImageLabel")
-    closeIcon.Name = "CloseIcon"
-    closeIcon.Size = UDim2.new(0, 16, 0, 16)
-    closeIcon.Position = UDim2.new(0.5, -8, 0.5, -8)
-    closeIcon.BackgroundTransparency = 1
-    closeIcon.Image = "rbxassetid://110786993356448"
-    closeIcon.ImageColor3 = Color3.fromRGB(161, 161, 170)
-    closeIcon.Parent = closeBtn
-
-    closeBtn.MouseEnter:Connect(function()
-        closeBtn.BackgroundTransparency = 0.88
-        closeIcon.ImageColor3 = Color3.fromRGB(255, 255, 255)
-    end)
-    closeBtn.MouseLeave:Connect(function()
-        closeBtn.BackgroundTransparency = 1
-        closeIcon.ImageColor3 = Color3.fromRGB(161, 161, 170)
-    end)
-    closeBtn.MouseButton1Click:Connect(function()
-        self:Close()
-    end)
-
-    -- Draggable TopBar logic
-    local dragging = false
-    local dragStart, startPos
-    topBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = main.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-
-    -- 2. SubBar (Egg Logs button & Reset Countdown)
-    local subBar = Instance.new("Frame")
-    subBar.Name = "SubBar"
-    subBar.Size = UDim2.new(1, -28, 0, 32)
-    subBar.Position = UDim2.new(0, 14, 0, 64)
-    subBar.BackgroundTransparency = 1
-    subBar.Parent = main
-
-    local logsBtn = Instance.new("TextButton")
-    logsBtn.Name = "EggLogsButton"
-    logsBtn.Text = ""
-    logsBtn.Size = UDim2.new(0, 105, 1, 0)
-    logsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
-    logsBtn.BorderSizePixel = 0
-    logsBtn.Parent = subBar
-
-    local logsCorner = Instance.new("UICorner")
-    logsCorner.CornerRadius = UDim.new(0, 8)
-    logsCorner.Parent = logsBtn
-
-    local logsStroke = Instance.new("UIStroke")
-    logsStroke.Color = Color3.fromRGB(46, 46, 52)
-    logsStroke.Thickness = 1
-    logsStroke.Parent = logsBtn
-
-    local logsIcon = Instance.new("ImageLabel")
-    logsIcon.Name = "LogsIcon"
-    logsIcon.Size = UDim2.new(0, 14, 0, 14)
-    logsIcon.Position = UDim2.new(0, 10, 0.5, -7)
-    logsIcon.BackgroundTransparency = 1
-    logsIcon.Image = "rbxassetid://113179976918783"
-    logsIcon.ImageColor3 = Color3.fromRGB(161, 161, 170)
-    logsIcon.Parent = logsBtn
-
-    local logsText = Instance.new("TextLabel")
-    logsText.Name = "LogsText"
-    logsText.Text = "Egg Logs"
-    logsText.Size = UDim2.new(1, -32, 1, 0)
-    logsText.Position = UDim2.new(0, 28, 0, 0)
-    logsText.BackgroundTransparency = 1
-    logsText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    logsText.TextSize = 12.5
-    setUIFont(logsText, Enum.FontWeight.SemiBold)
-    logsText.Parent = logsBtn
-
-    logsBtn.MouseEnter:Connect(function()
-        logsBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 46)
-        logsStroke.Color = Color3.fromRGB(60, 60, 70)
-    end)
-    logsBtn.MouseLeave:Connect(function()
-        logsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
-        logsStroke.Color = Color3.fromRGB(46, 46, 52)
-    end)
-
-    logsBtn.MouseButton1Click:Connect(function()
-        WindUI:Notify({
-            Title = "Egg Farming Stats",
-            Content = string.format("Session Total: %d eggs collected\nStatus: %s", State.EggsCollected, State.CurrentStatus),
-            Duration = 3,
-            Icon = "egg"
-        })
-    end)
-
-    local resetLabel = Instance.new("TextLabel")
-    resetLabel.Name = "ResetTimerLabel"
-    resetLabel.RichText = true
-    resetLabel.Text = '<font color="rgb(161,161,170)">Next Reset: </font><font color="rgb(255,255,255)"><b>Loading...</b></font>'
-    resetLabel.Size = UDim2.new(1, -115, 1, 0)
-    resetLabel.Position = UDim2.new(0, 115, 0, 0)
-    resetLabel.BackgroundTransparency = 1
-    resetLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    resetLabel.TextSize = 13
-    resetLabel.TextXAlignment = Enum.TextXAlignment.Right
-    setUIFont(resetLabel, Enum.FontWeight.SemiBold)
-    resetLabel.Parent = subBar
-    self.ResetLabel = resetLabel
-
-    -- 3. Search Bar
-    local searchFrame = Instance.new("Frame")
-    searchFrame.Name = "SearchFrame"
-    searchFrame.Size = UDim2.new(1, -28, 0, 34)
-    searchFrame.Position = UDim2.new(0, 14, 0, 106)
-    searchFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-    searchFrame.Parent = main
-
-    local searchCorner = Instance.new("UICorner")
-    searchCorner.CornerRadius = UDim.new(0, 8)
-    searchCorner.Parent = searchFrame
-
-    local searchStroke = Instance.new("UIStroke")
-    searchStroke.Color = Color3.fromRGB(40, 40, 46)
-    searchStroke.Thickness = 1
-    searchStroke.Parent = searchFrame
-
-    local searchIcon = Instance.new("ImageLabel")
-    searchIcon.Name = "SearchIcon"
-    searchIcon.Size = UDim2.new(0, 15, 0, 15)
-    searchIcon.Position = UDim2.new(0, 10, 0.5, -7.5)
-    searchIcon.BackgroundTransparency = 1
-    searchIcon.Image = "rbxassetid://121018724060431"
-    searchIcon.ImageColor3 = Color3.fromRGB(140, 140, 150)
-    searchIcon.Parent = searchFrame
-
-    local searchBox = Instance.new("TextBox")
-    searchBox.Name = "SearchBox"
-    searchBox.Text = "" -- Ensure empty string so only the placeholder displays
-    searchBox.Size = UDim2.new(1, -88, 1, 0)
-    searchBox.Position = UDim2.new(0, 32, 0, 0)
-    searchBox.BackgroundTransparency = 1
-    searchBox.PlaceholderText = "Search egg or rarity..."
-    searchBox.PlaceholderColor3 = Color3.fromRGB(140, 140, 150)
-    searchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    searchBox.TextSize = 12.5
-    searchBox.TextXAlignment = Enum.TextXAlignment.Left
-    searchBox.ClearTextOnFocus = false
-    setUIFont(searchBox, Enum.FontWeight.Medium)
-    searchBox.Parent = searchFrame
-    self.SearchBox = searchBox
-
-    searchBox.Focused:Connect(function()
-        searchStroke.Color = Color3.fromRGB(0, 145, 255)
-    end)
-    searchBox.FocusLost:Connect(function()
-        searchStroke.Color = Color3.fromRGB(40, 40, 46)
-    end)
-
-    local clearBtn = Instance.new("TextButton")
-    clearBtn.Name = "ClearButton"
-    clearBtn.Text = "Clear"
-    clearBtn.Size = UDim2.new(0, 44, 0, 22)
-    clearBtn.Position = UDim2.new(1, -50, 0.5, -11)
-    clearBtn.BackgroundColor3 = Color3.fromRGB(34, 34, 40)
-    clearBtn.TextColor3 = Color3.fromRGB(180, 180, 190)
-    clearBtn.TextSize = 11
-    setUIFont(clearBtn, Enum.FontWeight.Medium)
-    clearBtn.Parent = searchFrame
-
-    local clearCorner = Instance.new("UICorner")
-    clearCorner.CornerRadius = UDim.new(0, 6)
-    clearCorner.Parent = clearBtn
-
-    clearBtn.MouseEnter:Connect(function()
-        clearBtn.BackgroundColor3 = Color3.fromRGB(44, 44, 52)
-    end)
-    clearBtn.MouseLeave:Connect(function()
-        clearBtn.BackgroundColor3 = Color3.fromRGB(34, 34, 40)
-    end)
-
-    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        self.SearchQuery = string.lower(searchBox.Text or "")
-        self:RenderCards()
-    end)
-    clearBtn.MouseButton1Click:Connect(function()
-        searchBox.Text = ""
-        self.SearchQuery = ""
-        self:RenderCards()
-    end)
-
-    -- 4. Filter Pills Bar (Horizontal ScrollingFrame)
-    local filterScroll = Instance.new("ScrollingFrame")
-    filterScroll.Name = "FilterScroll"
-    filterScroll.Size = UDim2.new(1, -28, 0, 28)
-    filterScroll.Position = UDim2.new(0, 14, 0, 148)
-    filterScroll.BackgroundTransparency = 1
-    filterScroll.ScrollBarThickness = 0
-    filterScroll.CanvasSize = UDim2.new(0, 520, 0, 0)
-    filterScroll.ScrollingDirection = Enum.ScrollingDirection.X
-    filterScroll.Parent = main
-
-    local filterLayout = Instance.new("UIListLayout")
-    filterLayout.FillDirection = Enum.FillDirection.Horizontal
-    filterLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    filterLayout.Padding = UDim.new(0, 6)
-    filterLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    filterLayout.Parent = filterScroll
-
-    -- Ordered: "All" first, then highest rarity to lowest (Ethereal down to Common)
-    local filters = { "All", "Ethereal", "Divine", "Mythic", "Legendary", "Epic", "Rare", "Common" }
-    self.FilterButtons = {}
-
-    for i, fName in ipairs(filters) do
-        local pill = Instance.new("TextButton")
-        pill.Name = "Pill_" .. fName
-        pill.Text = fName
-        pill.LayoutOrder = i
-        pill.Size = UDim2.new(0, (fName == "All" or fName == "Any") and 46 or 64, 0, 26)
-        pill.TextSize = 11
-        pill.BorderSizePixel = 0
-        pill.Parent = filterScroll
-
-        local pCorner = Instance.new("UICorner")
-        pCorner.CornerRadius = UDim.new(0, 8)
-        pCorner.Parent = pill
-
-        local pStroke = Instance.new("UIStroke")
-        pStroke.Thickness = 1
-        pStroke.Parent = pill
-
-        self.FilterButtons[fName] = { Button = pill, Stroke = pStroke }
-
-        local function updatePillVisual()
-            if self.ActiveFilter == fName then
-                pill.BackgroundColor3 = Color3.fromRGB(0, 145, 255)
-                pStroke.Color = Color3.fromRGB(0, 145, 255)
-                pill.TextColor3 = Color3.fromRGB(255, 255, 255)
-                setUIFont(pill, Enum.FontWeight.SemiBold)
-            else
-                pill.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-                pStroke.Color = Color3.fromRGB(38, 38, 44)
-                pill.TextColor3 = Color3.fromRGB(161, 161, 170)
-                setUIFont(pill, Enum.FontWeight.Medium)
-            end
-        end
-        updatePillVisual()
-
-        pill.MouseEnter:Connect(function()
-            if self.ActiveFilter ~= fName then
-                pill.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
-            end
-        end)
-        pill.MouseLeave:Connect(function()
-            if self.ActiveFilter ~= fName then
-                pill.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-            end
-        end)
-
-        pill.MouseButton1Click:Connect(function()
-            self.ActiveFilter = fName
-            for name, item in pairs(self.FilterButtons) do
-                local isActive = (name == fName)
-                item.Button.BackgroundColor3 = isActive and Color3.fromRGB(0, 145, 255) or Color3.fromRGB(24, 24, 28)
-                item.Stroke.Color = isActive and Color3.fromRGB(0, 145, 255) or Color3.fromRGB(38, 38, 44)
-                item.Button.TextColor3 = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(161, 161, 170)
-                setUIFont(item.Button, isActive and Enum.FontWeight.SemiBold or Enum.FontWeight.Medium)
-            end
-            self:RenderCards()
-        end)
-    end
-
-    -- 5. Card Container (Vertical ScrollingFrame)
-    local cardScroll = Instance.new("ScrollingFrame")
-    cardScroll.Name = "CardScroll"
-    cardScroll.Size = UDim2.new(1, -28, 1, -196)
-    cardScroll.Position = UDim2.new(0, 14, 0, 184)
-    cardScroll.BackgroundTransparency = 1
-    cardScroll.ScrollBarThickness = 4
-    cardScroll.ScrollBarImageColor3 = Color3.fromRGB(65, 65, 75)
-    cardScroll.ScrollBarImageTransparency = 0.3
-    cardScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    cardScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    cardScroll.Parent = main
-    self.CardScroll = cardScroll
-
-    local cardLayout = Instance.new("UIListLayout")
-    cardLayout.Padding = UDim.new(0, 6)
-    cardLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    cardLayout.Parent = cardScroll
-
-    pcall(function()
-        self:Refresh()
-    end)
-end
-
-function EggPanel:RenderCards()
-    if not self.CardScroll then return end
-
-    local eggs = self.LastEggList or {}
-    local query = self.SearchQuery or ""
-    local filter = self.ActiveFilter or "All"
-    local isAll = (filter == "All" or filter == "Any")
-
-    local activeCardNames = {}
-    local visibleCount = 0
-
-    for i, egg in ipairs(eggs) do
-        local matchesFilter = isAll or (string.lower(egg.Rarity) == string.lower(filter))
-        local matchesSearch = (query == "")
-            or string.find(string.lower(egg.Name), query, 1, true)
-            or string.find(string.lower(egg.Rarity), query, 1, true)
-
-        if matchesFilter and matchesSearch then
-            visibleCount = visibleCount + 1
-            local cardName = "EggCard_" .. egg.Name
-            activeCardNames[cardName] = true
-
-            local card = self.CardScroll:FindFirstChild(cardName)
-            if card then
-                -- Card already exists: update dynamic count, distance, and layout order in-place
-                card.LayoutOrder = i
-                local sub = card:FindFirstChild("SubLabel")
-                if sub then
-                    sub.Text = string.format("%s • x%d In World • %d studs", egg.Rarity, egg.Count, egg.Distance)
-                end
-                local badge = card:FindFirstChild("LuckBadge")
-                local valLbl = badge and badge:FindFirstChild("LuckValueLabel")
-                if valLbl then
-                    valLbl.Text = formatValueString(egg.Luck) .. " Luck"
-                end
-            else
-                -- Create new card
-                card = Instance.new("Frame")
-                card.Name = cardName
-                card.Size = UDim2.new(1, 0, 0, 58)
-                card.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-                card.BorderSizePixel = 0
-                card.LayoutOrder = i
-                card.Parent = self.CardScroll
-
-                local cCorner = Instance.new("UICorner")
-                cCorner.CornerRadius = UDim.new(0, 10)
-                cCorner.Parent = card
-
-                local cStroke = Instance.new("UIStroke")
-                cStroke.Color = Color3.fromRGB(38, 38, 44)
-                cStroke.Thickness = 1
-                cStroke.Parent = card
-
-                card.MouseEnter:Connect(function()
-                    card.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
-                    cStroke.Color = Color3.fromRGB(52, 52, 60)
-                end)
-                card.MouseLeave:Connect(function()
-                    card.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-                    cStroke.Color = Color3.fromRGB(38, 38, 44)
-                end)
-
-                -- Left vertical color accent bar
-                local accent = Instance.new("Frame")
-                accent.Name = "RarityAccent"
-                accent.Size = UDim2.new(0, 3.5, 1, -16)
-                accent.Position = UDim2.new(0, 5, 0, 8)
-                accent.BackgroundColor3 = RARITY_COLORS[egg.Rarity] or Color3.fromRGB(0, 145, 255)
-                accent.BorderSizePixel = 0
-                accent.Parent = card
-                local aCorner = Instance.new("UICorner")
-                aCorner.CornerRadius = UDim.new(0, 2)
-                aCorner.Parent = accent
-
-                -- Egg Thumbnail Image
-                local iconHolder = Instance.new("Frame")
-                iconHolder.Name = "IconHolder"
-                iconHolder.Size = UDim2.new(0, 40, 0, 40)
-                iconHolder.Position = UDim2.new(0, 15, 0.5, -20)
-                iconHolder.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
-                iconHolder.BorderSizePixel = 0
-                iconHolder.Parent = card
-                local iconCorner = Instance.new("UICorner")
-                iconCorner.CornerRadius = UDim.new(0, 8)
-                iconCorner.Parent = iconHolder
-
-                local iconStroke = Instance.new("UIStroke")
-                iconStroke.Color = Color3.fromRGB(44, 44, 52)
-                iconStroke.Thickness = 1
-                iconStroke.Parent = iconHolder
-
-                if egg.Image and egg.Image ~= "" then
-                    local img = Instance.new("ImageLabel")
-                    img.Image = egg.Image
-                    img.Size = UDim2.new(0.85, 0, 0.85, 0)
-                    img.Position = UDim2.new(0.075, 0, 0.075, 0)
-                    img.BackgroundTransparency = 1
-                    img.Parent = iconHolder
-                else
-                    local fallbackTxt = Instance.new("TextLabel")
-                    fallbackTxt.Text = "🥚"
-                    fallbackTxt.Size = UDim2.new(1, 0, 1, 0)
-                    fallbackTxt.BackgroundTransparency = 1
-                    fallbackTxt.TextSize = 20
-                    fallbackTxt.Parent = iconHolder
-                end
-
-                -- Egg Name & Details
-                local nameLabel = Instance.new("TextLabel")
-                nameLabel.Name = "NameLabel"
-                nameLabel.Text = egg.Name
-                nameLabel.Size = UDim2.new(1, -180, 0, 20)
-                nameLabel.Position = UDim2.new(0, 66, 0, 9)
-                nameLabel.BackgroundTransparency = 1
-                nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                nameLabel.TextSize = 13
-                nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-                setUIFont(nameLabel, Enum.FontWeight.SemiBold)
-                nameLabel.Parent = card
-
-                local subLabel = Instance.new("TextLabel")
-                subLabel.Name = "SubLabel"
-                subLabel.Text = string.format("%s • x%d In World • %d studs", egg.Rarity, egg.Count, egg.Distance)
-                subLabel.Size = UDim2.new(1, -180, 0, 16)
-                subLabel.Position = UDim2.new(0, 66, 0, 29)
-                subLabel.BackgroundTransparency = 1
-                subLabel.TextColor3 = Color3.fromRGB(161, 161, 170)
-                subLabel.TextSize = 10.5
-                subLabel.TextXAlignment = Enum.TextXAlignment.Left
-                setUIFont(subLabel, Enum.FontWeight.Medium)
-                subLabel.Parent = card
-
-                -- Right-aligned Luck Value Badge
-                local luckValueBadge = Instance.new("Frame")
-                luckValueBadge.Name = "LuckBadge"
-                luckValueBadge.Size = UDim2.new(0, 100, 0, 20)
-                luckValueBadge.Position = UDim2.new(1, -108, 0, 9)
-                luckValueBadge.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
-                luckValueBadge.BorderSizePixel = 0
-                luckValueBadge.Parent = card
-
-                local badgeCorner = Instance.new("UICorner")
-                badgeCorner.CornerRadius = UDim.new(0, 6)
-                badgeCorner.Parent = luckValueBadge
-
-                local badgeStroke = Instance.new("UIStroke")
-                badgeStroke.Color = Color3.fromRGB(48, 48, 58)
-                badgeStroke.Thickness = 1
-                badgeStroke.Parent = luckValueBadge
-
-                local luckValueLabel = Instance.new("TextLabel")
-                luckValueLabel.Name = "LuckValueLabel"
-                luckValueLabel.Text = formatValueString(egg.Luck) .. " Luck"
-                luckValueLabel.Size = UDim2.new(1, 0, 1, 0)
-                luckValueLabel.BackgroundTransparency = 1
-                luckValueLabel.TextColor3 = Color3.fromRGB(56, 189, 248)
-                luckValueLabel.TextSize = 11.5
-                setUIFont(luckValueLabel, Enum.FontWeight.SemiBold)
-                luckValueLabel.Parent = luckValueBadge
-
-                local tierLabel = Instance.new("TextLabel")
-                tierLabel.Name = "TierLabel"
-                tierLabel.Text = "Tier " .. egg.Rarity
-                tierLabel.Size = UDim2.new(0, 100, 0, 16)
-                tierLabel.Position = UDim2.new(1, -108, 0, 30)
-                tierLabel.BackgroundTransparency = 1
-                tierLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
-                tierLabel.TextSize = 9.5
-                tierLabel.TextXAlignment = Enum.TextXAlignment.Right
-                setUIFont(tierLabel, Enum.FontWeight.Medium)
-                tierLabel.Parent = card
-            end
-        end
-    end
-
-    -- Automatically remove any cards for eggs that are no longer on the map
-    for _, child in ipairs(self.CardScroll:GetChildren()) do
-        if child:IsA("Frame") and string.sub(child.Name, 1, 8) == "EggCard_" then
-            if not activeCardNames[child.Name] then
-                child:Destroy()
-            end
-        end
-    end
-
-    -- Empty state handling
-    local empty = self.CardScroll:FindFirstChild("EmptyLabel")
-    if visibleCount == 0 then
-        if not empty then
-            empty = Instance.new("TextLabel")
-            empty.Name = "EmptyLabel"
-            empty.Text = "No eggs matching criteria."
-            empty.Size = UDim2.new(1, 0, 0, 40)
-            empty.BackgroundTransparency = 1
-            empty.TextColor3 = Color3.fromRGB(140, 140, 150)
-            empty.TextSize = 12
-            setUIFont(empty, Enum.FontWeight.Medium)
-            empty.Parent = self.CardScroll
-        end
-    else
-        if empty then
-            empty:Destroy()
-        end
-    end
-end
-
-function EggPanel:Refresh()
-    self.LastEggList = getActiveEggData()
-    self.NextResetText = getEggResetTimeText()
-
-    if self.ResetLabel then
-        self.ResetLabel.Text = string.format(
-            '<font color="rgb(161,161,170)">Next Reset: </font><font color="rgb(255,255,255)"><b>%s</b></font>',
-            self.NextResetText
-        )
-    end
-
-    if self.IsOpen then
-        self:RenderCards()
-    end
-
-    if self.UpdateCallback then
-        pcall(self.UpdateCallback, self.LastEggList, self.NextResetText)
-    end
-end
-
-function EggPanel:Open()
-    if not self.Gui then
-        self:Init()
-    end
-    if self.SearchBox then
-        self.SearchBox.Text = ""
-        self.SearchQuery = ""
-    end
-    self.Gui.Enabled = true
-    self.IsOpen = true
-    self:Refresh()
-end
-
-function EggPanel:Close()
-    if self.Gui then
-        self.Gui.Enabled = false
-    end
-    self.IsOpen = false
-end
-
-function EggPanel:Toggle()
-    if self.IsOpen then
-        self:Close()
-    else
-        self:Open()
-    end
-end
-
-function EggPanel:StartAutoUpdate()
-    local thisRunId = ScriptRunId
-
-    -- Real-time egg spawn and collection listeners on workspace.RenderedEggs
-    local eggsFolder = workspace:FindFirstChild("RenderedEggs")
-    if eggsFolder then
-        eggsFolder.ChildAdded:Connect(function()
-            if self.IsOpen then
-                pcall(function() self:Refresh() end)
-            end
-        end)
-        eggsFolder.ChildRemoved:Connect(function()
-            if self.IsOpen then
-                pcall(function() self:Refresh() end)
-            end
-        end)
-    end
-
-    -- Real-time second-by-second timer countdown and distance radar
-    task.spawn(function()
-        while true do
-            if getgenv and getgenv().FrostHubRunId ~= thisRunId then break end
-            pcall(function()
-                self:Refresh()
-            end)
-            task.wait(1)
-        end
-    end)
-end
-
---------------------------------------------------------------------------------
--- EGG ESP SUBSYSTEM (3D World Overlays & Filtering)
---------------------------------------------------------------------------------
-local EggESP = {
-    Enabled = false,
-    MinLuck = 0,
-    ActiveMarkers = {}, -- [eggModel] = { Gui = BillboardGui, Part = BasePart, EggName = string, Luck = number, Rarity = string, DistLabel = TextLabel, LuckText = string }
-    Holder = nil,
-    UpdateTask = nil,
-    Listeners = {},
-    StatusParagraph = nil,
-}
-
-function EggESP:GetHolder()
-    if not self.Holder or not self.Holder.Parent then
-        local pgui = LocalPlayer:WaitForChild("PlayerGui")
-        local existing = pgui:FindFirstChild("FrostHub_ESP_Holder")
-        if existing then
-            self.Holder = existing
-        else
-            local holder = Instance.new("Folder")
-            holder.Name = "FrostHub_ESP_Holder"
-            holder.Parent = pgui
-            self.Holder = holder
-        end
-    end
-    return self.Holder
-end
-
-function EggESP:CreateMarker(eggModel)
-    if not eggModel or not eggModel:IsA("Model") then return end
-    if self.ActiveMarkers[eggModel] then return end
-
-    local part = eggModel.PrimaryPart or eggModel:FindFirstChild("Handle") or eggModel:FindFirstChildWhichIsA("BasePart")
-    if not part then return end
-
-    local eggName = eggModel.Name
-    local GameDataEggs = nil
-    pcall(function()
-        local gd = ReplicatedStorage:FindFirstChild("GameData")
-        if gd and gd:FindFirstChild("Eggs") then
-            GameDataEggs = require(gd.Eggs)
-        end
-    end)
-    local gData = GameDataEggs and GameDataEggs[eggName]
-    local luck = gData and gData.Luck or EggLuckCache[eggName] or 1
-    local rarity = gData and gData.Rarity or "Common"
-    local rarityColor = RARITY_COLORS[rarity] or Color3.fromRGB(0, 145, 255)
-    local luckText = formatValueString(luck) .. " Luck"
-
-    local holder = self:GetHolder()
-    local bb = Instance.new("BillboardGui")
-    bb.Name = "ESP_" .. eggName
-    bb.Adornee = part
-    bb.Size = UDim2.new(0, 145, 0, 38)
-    bb.StudsOffset = Vector3.new(0, 2.8, 0)
-    bb.AlwaysOnTop = true
-    bb.MaxDistance = 5000
-    bb.Enabled = self.Enabled and (luck >= self.MinLuck)
-    bb.Parent = holder
-
-    local bg = Instance.new("Frame")
-    bg.Name = "Background"
-    bg.Size = UDim2.new(1, 0, 1, 0)
-    bg.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
-    bg.BackgroundTransparency = 0.2
-    bg.BorderSizePixel = 0
-    bg.Parent = bb
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
-    corner.Parent = bg
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1
-    stroke.Color = rarityColor
-    stroke.Parent = bg
-
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "NameLabel"
-    nameLabel.Text = eggName
-    nameLabel.Size = UDim2.new(1, -8, 0, 18)
-    nameLabel.Position = UDim2.new(0, 4, 0, 2)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.TextColor3 = rarityColor
-    nameLabel.TextSize = 11
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Center
-    setUIFont(nameLabel, Enum.FontWeight.SemiBold)
-    nameLabel.Parent = bg
-
-    local hrp = getHRP()
-    local initialDist = hrp and (part.Position - hrp.Position).Magnitude or 0
-    local distLabel = Instance.new("TextLabel")
-    distLabel.Name = "DistLabel"
-    distLabel.RichText = true
-    distLabel.Text = string.format('<font color="rgb(56,189,248)">%s</font> <font color="rgb(161,161,170)">•</font> <font color="rgb(255,255,255)"><b>%d studs</b></font>', luckText, math.floor(initialDist))
-    distLabel.Size = UDim2.new(1, -8, 0, 16)
-    distLabel.Position = UDim2.new(0, 4, 0, 19)
-    distLabel.BackgroundTransparency = 1
-    distLabel.TextSize = 9.5
-    distLabel.TextXAlignment = Enum.TextXAlignment.Center
-    setUIFont(distLabel, Enum.FontWeight.Medium)
-    distLabel.Parent = bg
-
-    self.ActiveMarkers[eggModel] = {
-        Gui = bb,
-        Part = part,
-        EggName = eggName,
-        Luck = luck,
-        Rarity = rarity,
-        DistLabel = distLabel,
-        LuckText = luckText
-    }
-end
-
-function EggESP:RemoveMarker(eggModel)
-    local item = self.ActiveMarkers[eggModel]
-    if item then
-        if item.Gui then
-            pcall(function() item.Gui:Destroy() end)
-        end
-        self.ActiveMarkers[eggModel] = nil
-    end
-end
-
-function EggESP:UpdateFilter()
-    local visibleCount = 0
-    local totalMarkers = 0
-    for eggModel, item in pairs(self.ActiveMarkers) do
-        totalMarkers = totalMarkers + 1
-        local isVisible = self.Enabled and (item.Luck >= self.MinLuck)
-        if item.Gui then
-            item.Gui.Enabled = isVisible
-        end
-        if isVisible then
-            visibleCount = visibleCount + 1
-        end
-    end
-    self:UpdateStatusUI(visibleCount, totalMarkers)
-end
-
-function EggESP:UpdateStatusUI(visibleCount, totalCount)
-    if not self.StatusParagraph then return end
-    pcall(function()
-        local total = totalCount or 0
-        local vis = visibleCount
-        if not vis then
-            vis = 0
-            for _, item in pairs(self.ActiveMarkers) do
-                if self.Enabled and (item.Luck >= self.MinLuck) then
-                    vis = vis + 1
-                end
-                total = total + 1
-            end
-        end
-
-        local filterText = self.MinLuck > 0 and (formatValueString(self.MinLuck) .. " Luck") or "All Eggs"
-        self.StatusParagraph:SetDesc(string.format(
-            "ESP Status: %s\nActive Filter: >= %s\nVisible Markers: %d / %d on map",
-            self.Enabled and "Active" or "Disabled",
-            filterText,
-            vis,
-            total
-        ))
-    end)
-end
-
-function EggESP:ScanAll()
-    local eggsFolder = workspace:FindFirstChild("RenderedEggs")
-    if eggsFolder then
-        for _, eggModel in ipairs(eggsFolder:GetChildren()) do
-            if eggModel:IsA("Model") then
-                self:CreateMarker(eggModel)
-            end
-        end
-    end
-    self:UpdateFilter()
-end
-
-function EggESP:StartDistanceUpdater()
-    if self.UpdateTask then return end
-    self.UpdateTask = task.spawn(function()
-        while self.Enabled do
-            local hrp = getHRP()
-            local playerPos = hrp and hrp.Position or Vector3.zero
-            for eggModel, item in pairs(self.ActiveMarkers) do
-                if not eggModel.Parent or not item.Part or not item.Part.Parent then
-                    self:RemoveMarker(eggModel)
-                elseif item.Gui and item.Gui.Enabled and item.DistLabel then
-                    pcall(function()
-                        local dist = (item.Part.Position - playerPos).Magnitude
-                        item.DistLabel.Text = string.format(
-                            '<font color="rgb(56,189,248)">%s</font> <font color="rgb(161,161,170)">•</font> <font color="rgb(255,255,255)"><b>%d studs</b></font>',
-                            item.LuckText,
-                            math.floor(dist)
-                        )
-                    end)
-                end
-            end
-            task.wait(0.25)
-        end
-        self.UpdateTask = nil
-    end)
-end
-
-function EggESP:SetEnabled(state)
-    self.Enabled = state
-    Config.ESPEnabled = state
-    if state then
-        self:ScanAll()
-        self:StartDistanceUpdater()
-    else
-        if self.UpdateTask then
-            pcall(task.cancel, self.UpdateTask)
-            self.UpdateTask = nil
-        end
-        for _, item in pairs(self.ActiveMarkers) do
-            if item.Gui then item.Gui.Enabled = false end
-        end
-    end
-    self:UpdateFilter()
-end
-
-function EggESP:SetMinLuck(val, valStr)
-    self.MinLuck = val
-    Config.ESPMinLuck = val
-    Config.ESPMinLuckString = valStr or formatValueString(val)
-    self:UpdateFilter()
-end
-
-function EggESP:Init()
-    local function hookFolder(folder)
-        table.insert(self.Listeners, folder.ChildAdded:Connect(function(child)
-            if child:IsA("Model") then
-                task.defer(function()
-                    self:CreateMarker(child)
-                    self:UpdateFilter()
-                end)
-            end
-        end))
-        table.insert(self.Listeners, folder.ChildRemoved:Connect(function(child)
-            if self.ActiveMarkers[child] then
-                self:RemoveMarker(child)
-                self:UpdateFilter()
-            end
-        end))
-    end
-
-    local eggsFolder = workspace:FindFirstChild("RenderedEggs")
-    if eggsFolder then
-        hookFolder(eggsFolder)
-    else
-        table.insert(self.Listeners, workspace.ChildAdded:Connect(function(child)
-            if child.Name == "RenderedEggs" then
-                hookFolder(child)
-                if self.Enabled then
-                    self:ScanAll()
-                end
-            end
-        end))
-    end
-    if self.Enabled then
-        self:ScanAll()
-        self:StartDistanceUpdater()
-    end
-end
-
-function EggESP:Destroy()
-    self.Enabled = false
-    if self.UpdateTask then
-        pcall(task.cancel, self.UpdateTask)
-        self.UpdateTask = nil
-    end
-    for _, conn in ipairs(self.Listeners) do
-        pcall(function() conn:Disconnect() end)
-    end
-    self.Listeners = {}
-    for _, item in pairs(self.ActiveMarkers) do
-        if item.Gui then pcall(function() item.Gui:Destroy() end) end
-    end
-    self.ActiveMarkers = {}
-    if self.Holder then
-        pcall(function() self.Holder:Destroy() end)
-        self.Holder = nil
-    end
-    local pgui = LocalPlayer:FindFirstChild("PlayerGui")
-    if pgui then
-        local old = pgui:FindFirstChild("FrostHub_ESP_Holder")
-        if old then pcall(function() old:Destroy() end) end
-    end
-end
-
---------------------------------------------------------------------------------
--- WINDUI MODERN HUD CREATION
---------------------------------------------------------------------------------
-pcall(function()
-    if gethui then
-        for _, c in ipairs(gethui():GetChildren()) do
-            if string.find(c.Name, "Frost") or string.find(c.Name, "WindUI") then c:Destroy() end
-        end
-    end
-    for _, c in ipairs(CoreGui:GetChildren()) do
-        if string.find(c.Name, "Frost") or string.find(c.Name, "WindUI") then c:Destroy() end
-    end
-    if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
-        for _, c in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
-            if string.find(c.Name, "FrostHub") then c:Destroy() end
-        end
-    end
-
-    -- Clean up any residual Lighting blur and restore game's EggTracker state
-    local Lighting = game:GetService("Lighting")
-    local blur = Lighting:FindFirstChild("Blur")
-    if blur and blur:IsA("BlurEffect") then
-        blur.Enabled = false
-    end
-    local et = LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main:FindFirstChild("EggTracker")
-    if et then
-        et.Visible = false
-        if et.Position.X.Scale == 999 then
-            et.Position = UDim2.new(0.5, -150, 0.5, -200)
-        end
-    end
-end)
-
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-
---------------------------------------------------------------------------------
--- SCRIPT KEY SYSTEM VALIDATOR
---------------------------------------------------------------------------------
-local function decodeB64(input)
-    if crypt and crypt.base64decode then
-        return crypt.base64decode(input)
-    end
-    if syn and syn.crypt and syn.crypt.base64 and syn.crypt.base64.decode then
-        return syn.crypt.base64.decode(input)
-    end
-    local bs = {
-        A=0,B=1,C=2,D=3,E=4,F=5,G=6,H=7,I=8,J=9,K=10,L=11,M=12,N=13,O=14,P=15,
-        Q=16,R=17,S=18,T=19,U=20,V=21,W=22,X=23,Y=24,Z=25,a=26,b=27,c=28,d=29,
-        e=30,f=31,g=32,h=33,i=34,j=35,k=36,l=37,m=38,n=39,o=40,p=41,q=42,r=43,
-        s=44,t=45,u=46,v=47,w=48,x=49,y=50,z=51,["0"]=52,["1"]=53,["2"]=54,
-        ["3"]=55,["4"]=56,["5"]=57,["6"]=58,["7"]=59,["8"]=60,["9"]=61,["+"]=62,["/"]=63
-    }
-    local out = {}
-    local n = #input
-    local i = 1
-    while i <= n do
-        local a = bs[input:sub(i, i)] or 0
-        local b = bs[input:sub(i+1, i+1)] or 0
-        local c = bs[input:sub(i+2, i+2)] or 0
-        local d = bs[input:sub(i+3, i+3)] or 0
-        local c1 = (a * 4) + math.floor(b / 16)
-        local c2 = ((b % 16) * 16) + math.floor(c / 4)
-        local c3 = ((c % 4) * 64) + d
-        table.insert(out, string.char(c1))
-        if input:sub(i+2, i+2) ~= "=" then table.insert(out, string.char(c2)) end
-        if input:sub(i+3, i+3) ~= "=" then table.insert(out, string.char(c3)) end
-        i = i + 4
-    end
-    return table.concat(out)
-end
-
-local _b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-local function encodeB64(data)
-    if crypt and type(crypt.base64encode) == "function" then
-        local s, r = pcall(crypt.base64encode, data)
-        if s and r then return r end
-    end
-    local bytes = { string.byte(data, 1, #data) }
-    local result = {}
-    local len = #bytes
-    for i = 1, len, 3 do
-        local b1 = bytes[i]
-        local b2 = bytes[i + 1]
-        local b3 = bytes[i + 2]
-
-        local c1 = math.floor(b1 / 4) + 1
-        local c2 = ((b1 % 4) * 16) + (b2 and math.floor(b2 / 16) or 0) + 1
-        local c3 = (b2 and ((b2 % 16) * 4) + (b3 and math.floor(b3 / 64) or 0) + 1) or nil
-        local c4 = (b3 and (b3 % 64) + 1) or nil
-
-        table.insert(result, _b64chars:sub(c1, c1))
-        table.insert(result, _b64chars:sub(c2, c2))
-        table.insert(result, c3 and _b64chars:sub(c3, c3) or "=")
-        table.insert(result, c4 and _b64chars:sub(c4, c4) or "=")
-    end
-    return table.concat(result)
-end
-
-local _gh1 = "github_pat_11COSC7PY0ypW4gPvLQau2_"
-local _gh2 = "NVSZYW0W3mhDEGcZNTu05q2QCdA39tQsAcjuwA5C2PZNYRCB3CI3MqNmn0g"
-local GITHUB_AUTH_TOKEN = _gh1 .. _gh2
-
-local function getDeviceHWID()
-    local hwid = nil
-    -- 1. Executor gethwid / get_hwid
-    pcall(function()
-        if type(gethwid) == "function" then
-            hwid = gethwid()
-        elseif type(get_hwid) == "function" then
-            hwid = get_hwid()
-        end
-    end)
-    -- 2. RbxAnalyticsService GetClientId (Universal Roblox Client ID)
-    if not hwid or tostring(hwid) == "" then
-        pcall(function()
-            hwid = game:GetService("RbxAnalyticsService"):GetClientId()
-        end)
-    end
-    -- 3. getgenv().gethwid
-    if not hwid or tostring(hwid) == "" then
-        pcall(function()
-            if getgenv and type(getgenv().gethwid) == "function" then
-                hwid = getgenv().gethwid()
-            end
-        end)
-    end
-    -- 4. Fallback: LocalPlayer UserId hash
-    if not hwid or tostring(hwid) == "" then
-        pcall(function()
-            local lp = game:GetService("Players").LocalPlayer
-            hwid = "DEV-" .. tostring(lp and lp.UserId or "CLIENT")
-        end)
-    end
-    return hwid and string.gsub(tostring(hwid), "%s+", "") or "UNKNOWN_HWID"
-end
-
-local function bindKeyHWID(targetKey, hwid)
-    local getUrl = "https://api.github.com/repos/Frost-GG-Hud/Scripts/contents/keys.json"
-    local customReq = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request) or (delta and delta.request)
-    if not customReq then
-        return false
-    end
-
-    local localPlayerName = "Unknown"
-    pcall(function()
-        local lp = game:GetService("Players").LocalPlayer
-        if lp then
-            localPlayerName = lp.Name .. " (" .. tostring(lp.UserId) .. ")"
-        end
-    end)
-
-    for attempt = 1, 2 do
-        local sha = nil
-        local currentKeys = nil
-
-        pcall(function()
-            local res = customReq({
-                Url = getUrl,
-                Method = "GET",
-                Headers = {
-                    ["Authorization"] = "Bearer " .. GITHUB_AUTH_TOKEN,
-                    ["Accept"] = "application/vnd.github+json",
-                    ["User-Agent"] = "FrostHub-HWID-System"
-                }
-            })
-            local status = res and (res.StatusCode or res.Status)
-            if status == 200 then
-                local data = HttpService:JSONDecode(res.Body)
-                if data and data.sha and data.content then
-                    sha = data.sha
-                    local cleanB64 = string.gsub(data.content, "%s+", "")
-                    local decoded = decodeB64(cleanB64)
-                    local parsed = HttpService:JSONDecode(decoded)
-                    if parsed and parsed.keys then
-                        currentKeys = parsed.keys
-                    end
-                end
-            end
-        end)
-
-        if sha and currentKeys then
-            local updated = false
-            for _, entry in ipairs(currentKeys) do
-                local k = string.gsub(string.upper(tostring(entry.key or "")), "%s+", "")
-                if k == targetKey then
-                    entry.hwid = hwid
-                    entry.hwid_linked_at = os.time()
-                    entry.hwid_user = localPlayerName
-                    updated = true
+            while true do
+                local _sym = _decodeHuffman(_lt)
+                if _sym < 256 then
+                    _out[_outIdx] = _sym
+                    _outIdx = _outIdx + 1
+                elseif _sym == 256 then
                     break
-                end
-            end
-
-            if updated then
-                local newJson = HttpService:JSONEncode({ keys = currentKeys })
-                local newB64 = encodeB64(newJson)
-                local putSuccess = false
-
-                pcall(function()
-                    local putRes = customReq({
-                        Url = getUrl,
-                        Method = "PUT",
-                        Headers = {
-                            ["Authorization"] = "Bearer " .. GITHUB_AUTH_TOKEN,
-                            ["Accept"] = "application/vnd.github+json",
-                            ["Content-Type"] = "application/json",
-                            ["User-Agent"] = "FrostHub-HWID-System"
-                        },
-                        Body = HttpService:JSONEncode({
-                            message = "HWID lock key " .. targetKey,
-                            content = newB64,
-                            sha = sha,
-                            branch = "main"
-                        })
-                    })
-                    local code = putRes and (putRes.StatusCode or putRes.Status)
-                    if code == 200 or code == 201 then
-                        putSuccess = true
-                    end
-                end)
-
-                if putSuccess then
-                    return true
-                end
-            end
-        end
-
-        if attempt < 2 then
-            task.wait(1)
-        end
-    end
-
-    return false
-end
-
-local function fetchValidKeys()
-    local jsonContent = nil
-    local customReq = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request) or (delta and delta.request)
-
-    -- Attempt 1: Authenticated GitHub API (high rate limit, 0s cache delay)
-    if customReq then
-        pcall(function()
-            local res = customReq({
-                Url = "https://api.github.com/repos/Frost-GG-Hud/Scripts/contents/keys.json",
-                Method = "GET",
-                Headers = {
-                    ["Authorization"] = "Bearer " .. GITHUB_AUTH_TOKEN,
-                    ["Accept"] = "application/vnd.github+json",
-                    ["User-Agent"] = "FrostHub-KeySystem"
-                }
-            })
-            local status = res and (res.StatusCode or res.Status)
-            if status == 200 and res.Body and res.Body ~= "" then
-                local data = HttpService:JSONDecode(res.Body)
-                if data and data.content then
-                    local cleanB64 = string.gsub(data.content, "%s+", "")
-                    jsonContent = decodeB64(cleanB64)
-                end
-            end
-        end)
-    end
-
-    -- Attempt 2: Unauthenticated GitHub API
-    if not jsonContent or jsonContent == "" then
-        pcall(function()
-            local res = game:HttpGet("https://api.github.com/repos/Frost-GG-Hud/Scripts/contents/keys.json")
-            if res and res ~= "" then
-                local data = HttpService:JSONDecode(res)
-                if data and data.content then
-                    local cleanB64 = string.gsub(data.content, "%s+", "")
-                    jsonContent = decodeB64(cleanB64)
-                end
-            end
-        end)
-    end
-
-    -- Attempt 3: Fallback to raw GitHub
-    if not jsonContent or jsonContent == "" then
-        pcall(function()
-            jsonContent = game:HttpGet("https://raw.githubusercontent.com/Frost-GG-Hud/Scripts/main/keys.json?t=" .. tostring(os.time()))
-        end)
-    end
-
-    if not jsonContent or jsonContent == "" then return {} end
-    local success, result = pcall(function()
-        return HttpService:JSONDecode(jsonContent)
-    end)
-    if success and type(result) == "table" and result.keys then
-        return result.keys
-    end
-    return {}
-end
-
-local DISCORD_INVITE_URL = "https://discord.gg/xGfTjURZVb"
-
-local ValidatedKeyData = {
-    Key = "FREEKEY-FROST-3432432-4324324",
-    Duration = "Lifetime",
-    ExpiresAt = nil,
-    ValidatedAt = os.time()
-}
-
-local function formatKeyRemaining()
-    if not ValidatedKeyData.ExpiresAt or ValidatedKeyData.ExpiresAt <= 0 then
-        return "Lifetime"
-    end
-    local remaining = ValidatedKeyData.ExpiresAt - os.time()
-    if remaining <= 0 then
-        return "Expired"
-    end
-    local days = math.floor(remaining / 86400)
-    local hours = math.floor((remaining % 86400) / 3600)
-    local minutes = math.floor((remaining % 3600) / 60)
-    local seconds = remaining % 60
-    
-    local parts = {}
-    if days > 0 then
-        table.insert(parts, string.format("%d day%s", days, days == 1 and "" or "s"))
-    end
-    if hours > 0 then
-        table.insert(parts, string.format("%d hour%s", hours, hours == 1 and "" or "s"))
-    end
-    if minutes > 0 then
-        table.insert(parts, string.format("%d minute%s", minutes, minutes == 1 and "" or "s"))
-    end
-    table.insert(parts, string.format("%d second%s", seconds, seconds == 1 and "" or "s"))
-    return table.concat(parts, ", ")
-end
-
---------------------------------------------------------------------------------
--- EXECUTION TRACKER & DISCORD LOGGING SUBSYSTEM (Channel 1550661063731843102)
---------------------------------------------------------------------------------
-local _wh1 = "https://discord.com/api/webhooks/1550664343564197996/"
-local _wh2 = "SpzOf0c_CYY4Gag6woferJvTqmmBDHmVu6-MFro4mmeNLnaNPVjaJIeSdxlnDprzfTMm"
-local EXECUTION_WEBHOOK_URL = _wh1 .. _wh2
-local ExecutionStatsParagraph = nil
-local CurrentTotalExecutions = nil
-
-local function recordAndLogExecution()
-    task.spawn(function()
-        local customReq = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request) or (delta and delta.request)
-        local lp = Players.LocalPlayer
-        local username = lp and lp.Name or "Unknown"
-        local displayName = lp and lp.DisplayName or username
-        local userId = lp and lp.UserId or 0
-        local userProfileUrl = "https://www.roblox.com/users/" .. tostring(userId) .. "/profile"
-        local avatarUrl = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. tostring(userId) .. "&width=420&height=420&format=png"
-
-        -- Detect game / experience name
-        local gameName = "Roblox Experience"
-        local placeId = game.PlaceId
-        local jobId = tostring(game.JobId or "")
-        pcall(function()
-            local MarketplaceService = game:GetService("MarketplaceService")
-            local info = MarketplaceService:GetProductInfo(placeId)
-            if info and info.Name and info.Name ~= "" then
-                gameName = info.Name
-            end
-        end)
-        if gameName == "Roblox Experience" and game.Name and game.Name ~= "" then
-            gameName = game.Name
-        end
-
-        -- Detect executor name
-        local executorName = "Standard Executor"
-        pcall(function()
-            if identifyexecutor then
-                executorName = identifyexecutor()
-            elseif getexecutorname then
-                executorName = getexecutorname()
-            end
-        end)
-
-        -- Fetch and Increment Execution Count from GitHub
-        local newTotal = 1
-        local getUrl = "https://api.github.com/repos/Frost-GG-Hud/Scripts/contents/executions.json"
-
-        if customReq then
-            for attempt = 1, 3 do
-                local sha = nil
-                local currentTotal = 0
-                local fetchSuccess = false
-
-                pcall(function()
-                    local res = customReq({
-                        Url = getUrl,
-                        Method = "GET",
-                        Headers = {
-                            ["Authorization"] = "Bearer " .. GITHUB_AUTH_TOKEN,
-                            ["Accept"] = "application/vnd.github+json",
-                            ["User-Agent"] = "FrostHub-Execution-Tracker"
-                        }
-                    })
-                    local status = res and (res.StatusCode or res.Status)
-                    if status == 200 and res.Body then
-                        local data = HttpService:JSONDecode(res.Body)
-                        if data and data.sha and data.content then
-                            sha = data.sha
-                            local cleanB64 = string.gsub(data.content, "%s+", "")
-                            local decoded = decodeB64(cleanB64)
-                            local parsed = HttpService:JSONDecode(decoded)
-                            if parsed and parsed.total then
-                                currentTotal = tonumber(parsed.total) or 0
-                                fetchSuccess = true
-                            end
-                        end
-                    elseif status == 404 then
-                        currentTotal = 0
-                        fetchSuccess = true
-                    end
-                end)
-
-                if fetchSuccess then
-                    newTotal = currentTotal + 1
-                    local payloadData = {
-                        total = newTotal,
-                        last_execution = os.time(),
-                        last_user = username,
-                        last_user_id = userId,
-                        last_game = gameName,
-                        last_place_id = placeId
-                    }
-                    local putBody = {
-                        message = string.format("Increment execution count (#%d)", newTotal),
-                        content = encodeB64(HttpService:JSONEncode(payloadData)),
-                        branch = "main"
-                    }
-                    if sha then
-                        putBody.sha = sha
-                    end
-
-                    local putSuccess = false
-                    pcall(function()
-                        local putRes = customReq({
-                            Url = getUrl,
-                            Method = "PUT",
-                            Headers = {
-                                ["Authorization"] = "Bearer " .. GITHUB_AUTH_TOKEN,
-                                ["Accept"] = "application/vnd.github+json",
-                                ["Content-Type"] = "application/json",
-                                ["User-Agent"] = "FrostHub-Execution-Tracker"
-                            },
-                            Body = HttpService:JSONEncode(putBody)
-                        })
-                        local code = putRes and (putRes.StatusCode or putRes.Status)
-                        if code == 200 or code == 201 then
-                            putSuccess = true
-                        end
-                    end)
-
-                    if putSuccess then
-                        pcall(function()
-                            if writefile then
-                                writefile("FrostHub/executions_cache.json", HttpService:JSONEncode(payloadData))
-                            end
-                        end)
-                        break
-                    end
-                end
-
-                if attempt < 3 then
-                    task.wait(1)
-                end
-            end
-        else
-            pcall(function()
-                if isfile and isfile("FrostHub/executions_cache.json") then
-                    local cached = HttpService:JSONDecode(readfile("FrostHub/executions_cache.json"))
-                    if cached and cached.total then
-                        newTotal = (tonumber(cached.total) or 0) + 1
-                    end
-                end
-            end)
-        end
-
-        CurrentTotalExecutions = newTotal
-        if ExecutionStatsParagraph then
-            pcall(function()
-                ExecutionStatsParagraph:SetDesc(string.format("• Total Hub Executions: #%d\n• Status: Execution recorded successfully", newTotal))
-            end)
-        end
-
-        -- Dispatch execution embed to Discord channel 1550661063731843102
-        local currentTime = os.time()
-        local embed = {
-            title = "❄️ Frost Hub • New Execution Logged",
-            description = "A user has executed Frost Hub. Total executions counter updated automatically.",
-            color = 0x00D9FF,
-            fields = {
-                {
-                    name = "👤 Roblox User",
-                    value = string.format("[**%s**](%s) (@%s)\n• User ID: `%d`", username, userProfileUrl, displayName, userId),
-                    inline = true
-                },
-                {
-                    name = "🎮 Game Executed In",
-                    value = string.format("[**%s**](https://www.roblox.com/games/%d)\n• Place ID: `%d`\n• Job ID: `%s`",
-                        gameName, placeId, placeId, (jobId ~= "" and (string.sub(jobId, 1, 16) .. "...") or "N/A")),
-                    inline = true
-                },
-                {
-                    name = "📊 Total Executions",
-                    value = string.format("🔥 **#%d** executions overall", newTotal),
-                    inline = true
-                },
-                {
-                    name = "⚡ Execution Event",
-                    value = string.format("• Event: `Script Execution Initialized`\n• Hub Version: `V 0.1`\n• Executor: `%s`\n• Timestamp: <t:%d:F> (<t:%d:R>)",
-                        executorName, currentTime, currentTime),
-                    inline = false
-                }
-            },
-            thumbnail = {
-                url = avatarUrl
-            },
-            footer = {
-                text = string.format("Frost Hub Analytics • Total: #%d executions", newTotal),
-                icon_url = "https://cdn.discordapp.com/emojis/1549461399065993226.png"
-            },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ", currentTime)
-        }
-
-        local webhookPayload = HttpService:JSONEncode({
-            username = "Frost Hub Executions",
-            avatar_url = "https://cdn.discordapp.com/emojis/1549461399065993226.png",
-            embeds = { embed }
-        })
-
-        if customReq then
-            pcall(function()
-                customReq({
-                    Url = EXECUTION_WEBHOOK_URL,
-                    Method = "POST",
-                    Headers = {
-                        ["Content-Type"] = "application/json"
-                    },
-                    Body = webhookPayload
-                })
-            end)
-        end
-    end)
-end
-
--- Immediately record and log execution
-task.spawn(recordAndLogExecution)
-
-local InfoTab = nil
-local updateInfoSection = nil
-
-local function validateFrostKey(inputKey)
-    if not inputKey or inputKey == "" then return false end
-    local cleanKey = string.gsub(string.upper(tostring(inputKey)), "%s+", "")
-    local keysList = fetchValidKeys()
-    local currentTime = os.time()
-
-    for _, keyData in ipairs(keysList) do
-        local k = string.gsub(string.upper(tostring(keyData.key or "")), "%s+", "")
-        if k == cleanKey then
-            if keyData.status and string.lower(keyData.status) == "revoked" then
-                WindUI:Notify({
-                    Title = "Key System",
-                    Content = "This key has been revoked.",
-                    Duration = 4,
-                    Icon = "circle-alert"
-                })
-                return false
-            end
-
-            local expiresAt = tonumber(keyData.expires_at)
-            if expiresAt and expiresAt > 0 then
-                if currentTime > expiresAt then
-                    WindUI:Notify({
-                        Title = "Key System",
-                        Content = "Key has expired! Use /create key in Discord.",
-                        Duration = 4,
-                        Icon = "clock-alert"
-                    })
-                    return false
-                end
-            end
-
-            -- HWID Device Protection Check (Each key can only be linked to one device)
-            local isExempt = (cleanKey == "FREEKEY-FROST-3432432-4324324" or keyData.unrestricted == true or keyData.hwid == "UNRESTRICTED")
-            local currentHWID = getDeviceHWID()
-
-            if not isExempt then
-                local boundHWID = keyData.hwid
-                if boundHWID and tostring(boundHWID) ~= "" and tostring(boundHWID) ~= "nil" and tostring(boundHWID) ~= "null" then
-                    -- Key is already locked to a device
-                    if tostring(boundHWID) ~= tostring(currentHWID) then
-                        WindUI:Notify({
-                            Title = "HWID Protection",
-                            Content = "This key is locked to another device! Each key can only be used on 1 device.",
-                            Duration = 5,
-                            Icon = "shield-alert"
-                        })
-                        return false
-                    end
                 else
-                    -- Key has not been locked to any device yet. Lock it to this device now!
-                    keyData.hwid = currentHWID
-                    task.spawn(function()
-                        bindKeyHWID(cleanKey, currentHWID)
-                    end)
-                    pcall(function()
-                        if writefile then
-                            writefile("frosthub_" .. cleanKey .. ".hwid", currentHWID)
-                        end
-                    end)
-                    WindUI:Notify({
-                        Title = "Device Linked",
-                        Content = "Key successfully locked to this device!",
-                        Duration = 3,
-                        Icon = "shield-check"
-                    })
-                end
-            end
-
-            if expiresAt and expiresAt > 0 then
-                ValidatedKeyData.Key = cleanKey
-                ValidatedKeyData.ExpiresAt = expiresAt
-                ValidatedKeyData.Duration = "Temporary"
-                ValidatedKeyData.ValidatedAt = currentTime
-                local remaining = expiresAt - currentTime
-                local days = math.floor(remaining / 86400)
-                local hours = math.floor((remaining % 86400) / 3600)
-                local mins = math.floor((remaining % 3600) / 60)
-                local timeStr = days > 0 and string.format("%dd %dh", days, hours) or (hours > 0 and string.format("%dh %dm", hours, mins) or string.format("%dm", mins))
-                WindUI:Notify({
-                    Title = "Key System",
-                    Content = "Access granted! Key valid for " .. timeStr .. ".",
-                    Duration = 3,
-                    Icon = "check-circle"
-                })
-                if updateInfoSection then
-                    pcall(updateInfoSection)
-                end
-                task.defer(function()
-                    pcall(function()
-                        if InfoTab then
-                            InfoTab:Select()
-                        end
-                    end)
-                end)
-                task.delay(0.5, function()
-                    pcall(function()
-                        if InfoTab then
-                            InfoTab:Select()
-                        end
-                    end)
-                end)
-                return true
-            else
-                -- Lifetime key
-                ValidatedKeyData.Key = cleanKey
-                ValidatedKeyData.ExpiresAt = nil
-                ValidatedKeyData.Duration = "Lifetime"
-                ValidatedKeyData.ValidatedAt = currentTime
-                WindUI:Notify({
-                    Title = "Key System",
-                    Content = "Access granted! Lifetime key verified.",
-                    Duration = 3,
-                    Icon = "check-circle"
-                })
-                if updateInfoSection then
-                    pcall(updateInfoSection)
-                end
-                task.defer(function()
-                    pcall(function()
-                        if InfoTab then
-                            InfoTab:Select()
-                        end
-                    end)
-                end)
-                task.delay(0.5, function()
-                    pcall(function()
-                        if InfoTab then
-                            InfoTab:Select()
-                        end
-                    end)
-                end)
-                return true
-            end
-        end
-    end
-
-    WindUI:Notify({
-        Title = "Key System",
-        Content = "Invalid key. Generate one in Discord using /create key.",
-        Duration = 4,
-        Icon = "x-circle"
-    })
-    return false
-end
-
-pcall(function()
-    if isfile and delfile then
-        local oldKeyFiles = {
-            "FrostHub/key.txt",
-            "FrostHub/key.json",
-            "FrostHub/keys.txt",
-            "FrostHub/savedkey.txt",
-            "WindUI/FrostHub/key.txt",
-            "WindUI/FrostHub/key.json",
-            "WindUI/key.txt"
-        }
-        for _, filePath in ipairs(oldKeyFiles) do
-            if isfile(filePath) then
-                delfile(filePath)
-            end
-        end
-    end
-end)
-
--- Key System customization: rename button to "Get discord invite", widen dialog for spacing, and notify on click
-task.spawn(function()
-    local handledButtons = {}
-    local function setupKeySystem(desc)
-        if desc:IsA("Frame") and desc.Size.X.Offset == 430 then
-            desc.Size = UDim2.new(0, 500, 0, 0)
-        end
-        if desc:IsA("TextLabel") and (desc.Text == "Get key" or desc.Text == "Copy key") then
-            desc.Text = "Get discord invite"
-            local btn = desc:FindFirstAncestorWhichIsA("TextButton") or (desc.Parent and desc.Parent:FindFirstAncestorWhichIsA("TextButton"))
-            if btn and not handledButtons[btn] then
-                handledButtons[btn] = true
-                btn.MouseButton1Click:Connect(function()
-                    pcall(function()
-                        local setclip = setclipboard or toclipboard or (syn and syn.write_clipboard)
-                        if setclip then
-                            setclip(DISCORD_INVITE_URL)
-                        end
-                    end)
-                    WindUI:Notify({
-                        Title = "Discord Invite Copied",
-                        Content = "Discord invite link copied to clipboard!\nPaste it into your browser or a Discord channel and join the server to get the key for free.\n\nKey tutorial is available in the get script key channel in the Discord server.",
-                        Duration = 8,
-                        Icon = "link"
-                    })
-                end)
-            end
-        end
-    end
-
-    if WindUI.ScreenGui and WindUI.ScreenGui:FindFirstChild("KeySystem") then
-        for _, desc in ipairs(WindUI.ScreenGui.KeySystem:GetDescendants()) do
-            setupKeySystem(desc)
-        end
-        WindUI.ScreenGui.KeySystem.DescendantAdded:Connect(setupKeySystem)
-    end
-end)
-
-local Window = WindUI:CreateWindow({
-    Title = "Frost Hub | Automation",
-    Icon = "snowflake",
-    Author = "Prototyping & Testing Suite",
-    Folder = "FrostHub",
-    Size = UDim2.fromOffset(590, 450),
-    MinSize = Vector2.new(500, 360),
-    MaxSize = Vector2.new(850, 600),
-    Transparent = true,
-    Theme = "Dark",
-    Resizable = true,
-    SideBarWidth = 180,
-    HideSearchBar = true,
-    KeySystem = {
-        KeyValidator = validateFrostKey,
-        Title = "Frost Hub • Key System",
-        Note = "Enter your key generated via Discord bot (/create key).\n• Join our Discord to get your key for free!\n• Key tutorial is available in the get script key channel in the Discord server.",
-        URL = DISCORD_INVITE_URL,
-        SaveKey = false,
-    },
-})
-
---------------------------------------------------------------------------------
--- TAB 1: INFORMATION
---------------------------------------------------------------------------------
-InfoTab = Window:Tab({
-    Title = "Information",
-    Icon = "info"
-})
-
-local InformationSection = InfoTab:Section({
-    Title = "✦ Key Information",
-    Opened = true
-})
-
-local KeyInfoParagraph = InformationSection:Paragraph({
-    Title = "◈ License Key",
-    Desc = "Loading key details..."
-})
-
-updateInfoSection = function()
-    pcall(function()
-        local keyText = (ValidatedKeyData.Key and ValidatedKeyData.Key ~= "") and ValidatedKeyData.Key or "Active Key"
-        local durationStr = formatKeyRemaining()
-
-        if KeyInfoParagraph then
-            KeyInfoParagraph:SetDesc(string.format(
-                "• Key: %s\n• Remaining Duration: %s",
-                keyText,
-                durationStr
-            ))
-        end
-    end)
-end
-
-updateInfoSection()
-
--- Automatic real-time key remaining duration updater (every 1s)
-task.spawn(function()
-    while true do
-        task.wait(1)
-        if KeyInfoParagraph then
-            pcall(updateInfoSection)
-        end
-    end
-end)
-
-local CommunitySection = InfoTab:Section({
-    Title = "❖ Community & Support",
-    Opened = true
-})
-
-CommunitySection:Paragraph({
-    Title = "⟡ Official Community",
-    Desc = "Join the official Frost Hub community for free keys, updates, giveaways, and developer announcements!\n\n• Server Link: " .. DISCORD_INVITE_URL
-})
-
-CommunitySection:Button({
-    Title = "❐ Copy Discord Invite",
-    Desc = "Copies " .. DISCORD_INVITE_URL .. " to your clipboard",
-    Callback = function()
-        pcall(function()
-            local setclip = setclipboard or toclipboard or (syn and syn.write_clipboard)
-            if setclip then
-                setclip(DISCORD_INVITE_URL)
-            end
-        end)
-        WindUI:Notify({
-            Title = "Discord Invite Copied",
-            Content = "Discord invite link copied to clipboard!\n" .. DISCORD_INVITE_URL .. "\nPaste it into your browser or Discord to join.",
-            Duration = 5,
-            Icon = "copy"
-        })
-    end
-})
-
-CommunitySection:Paragraph({
-    Title = "✦ Support & Documentation",
-    Desc = "• Need Help or Found a Bug? Open a support ticket in our Discord server.\n• Key Tutorial: Check out the step-by-step tutorial in the #get-script-key channel."
-})
-
-local SessionSection = InfoTab:Section({
-    Title = "◈ Session & Player Overview",
-    Opened = true
-})
-
-SessionSection:Paragraph({
-    Title = "◆ Farmer Profile",
-    Desc = string.format("• Player: %s (@%s)\n• User ID: %s\n• Account Age: %d days\n• Place ID: %s",
-        LocalPlayer.DisplayName or LocalPlayer.Name,
-        LocalPlayer.Name,
-        tostring(LocalPlayer.UserId),
-        LocalPlayer.AccountAge or 0,
-        tostring(game.PlaceId)
-    )
-})
-
-ExecutionStatsParagraph = SessionSection:Paragraph({
-    Title = "⚡ Global Executions",
-    Desc = CurrentTotalExecutions and string.format("• Total Hub Executions: #%d\n• Status: Active & Recorded", CurrentTotalExecutions) or "• Total Hub Executions: Recording execution..."
-})
-
-SessionSection:Paragraph({
-    Title = "🎮 Controls & Shortcuts",
-    Desc = "• Toggle Menu: RightControl or RightShift\n• Center Window: Settings Tab -> Center Window\n• Scale HUD: Settings Tab -> HUD Scale\n• Movement Speed: Adjust Tween speed instantly from 0 to 350 studs/s"
-})
-
--- Automatically select Information Tab upon initial load
-pcall(function()
-    InfoTab:Select()
-end)
-
-local UIControls = {}
-
---------------------------------------------------------------------------------
--- TAB 2: AUTOMATION
---------------------------------------------------------------------------------
-local MainTab = Window:Tab({
-    Title = "Automation",
-    Icon = "sparkles"
-})
-
-local MainSection = MainTab:Section({
-    Title = "Automation Engine",
-    Opened = true
-})
-
-local ToggleAuto
-ToggleAuto = MainSection:Toggle({
-    Title = "Auto Collect Eggs",
-    Desc = "Automates scanning, approaching, collecting, and plot depositing",
-    Value = false,
-    Callback = function(state)
-        State.Enabled = state
-        if state then
-            if State.CurrentTask then task.cancel(State.CurrentTask) end
-            State.CurrentTask = task.spawn(runCollectionLoop)
-            WindUI:Notify({
-                Title = "Auto Collect Enabled",
-                Content = string.format("Engine active (%s @ %d speed)", Config.MovementMode, Config.Speed),
-                Duration = 2.5,
-                Icon = "play"
-            })
-        else
-            if State.CurrentTask then
-                task.cancel(State.CurrentTask)
-                State.CurrentTask = nil
-            end
-            if State.ActiveTween then
-                State.ActiveTween:Cancel()
-                State.ActiveTween = nil
-            end
-            pcall(function() getHumanoid().WalkSpeed = 16 end)
-            State.CurrentStatus = "Stopped"
-            State.TargetEggName = "None"
-            State.TargetEggValue = 0
-            updateStatusUI()
-            WindUI:Notify({
-                Title = "Auto Collect Stopped",
-                Content = "Movement and tasks cancelled.",
-                Duration = 2,
-                Icon = "square"
-            })
-        end
-    end
-})
-UIControls.ToggleAuto = ToggleAuto
-
--- VALUE FILTERING SECTION
--- EGG LUCK FILTERING SECTION
-local FilterSection = MainTab:Section({
-    Title = "Egg Luck Filtering",
-    Opened = true
-})
-
-UIControls.ToggleLuckFilter = FilterSection:Toggle({
-    Title = "Collect by Luck",
-    Desc = "Only collect eggs with equal to or higher luck than the specified threshold",
-    Value = false,
-    Callback = function(state)
-        Config.CollectByLuck = state
-        Config.CollectByValue = state
-        updateStatusUI()
-        WindUI:Notify({
-            Title = "Luck Filter " .. (state and "Enabled" or "Disabled"),
-            Content = state and string.format("Collecting eggs >= %s Luck", formatValueString(Config.MinLuck)) or "Collecting all available eggs",
-            Duration = 2.5,
-            Icon = state and "sparkles" or "sparkles"
-        })
-    end
-})
-
-UIControls.InputLuckFilter = FilterSection:Input({
-    Title = "Egg Luck",
-    Desc = "Enter minimum luck (e.g. 100, 2k, 1m, 300b)",
-    Value = Config.MinLuckString,
-    Placeholder = "e.g. 100, 2k, 1m, 300b",
-    Callback = function(text)
-        local parsed = parseValueString(text)
-        if parsed > 0 then
-            Config.MinLuck = parsed
-            Config.MinLuckString = text
-            Config.MinValue = parsed
-            Config.MinValueString = text
-            updateStatusUI()
-            WindUI:Notify({
-                Title = "Egg Luck Threshold Updated",
-                Content = string.format("Minimum luck set to %s (%s)", formatValueString(parsed), tostring(parsed)),
-                Duration = 2.5,
-                Icon = "check"
-            })
-        end
-    end
-})
-
-local StatusParagraph = MainSection:Paragraph({
-    Title = "Live Activity Status",
-    Desc = "Status: Idle\nTarget: None\nEggs Collected: 0\nActive Engine: Walk (Pathfinding)\nCurrent Speed: 60\nLuck Filter: Disabled"
-})
-
-updateStatusUI = function()
-    pcall(function()
-        local filterStatus = "Disabled"
-        if Config.CollectByLuck or Config.CollectByValue then
-            filterStatus = string.format("Active (>= %s Luck)", formatValueString(Config.MinLuck or Config.MinValue))
-        end
-
-        StatusParagraph:SetDesc(string.format(
-            "Status: %s\nTarget: %s\nEggs Collected: %d\nActive Engine: %s\nSpeed: %d studs/s\nLuck Filter: %s",
-            State.CurrentStatus,
-            State.TargetEggName,
-            State.EggsCollected,
-            Config.MovementMode,
-            Config.Speed,
-            filterStatus
-        ))
-    end)
-end
-
-local ActionsSection = MainTab:Section({
-    Title = "Manual Triggers",
-    Opened = true
-})
-
-ActionsSection:Button({
-    Title = "Open Panel",
-    Desc = "Open the live Egg Panel showing all available eggs, luck values, and reset countdown",
-    Callback = function()
-        EggPanel:Open()
-    end
-})
-
-ActionsSection:Button({
-    Title = "Reset Statistics",
-    Desc = "Resets the session collected eggs counter to 0",
-    Callback = function()
-        State.EggsCollected = 0
-        updateStatusUI()
-        WindUI:Notify({
-            Title = "Stats Reset",
-            Content = "Collected egg counter reset to 0.",
-            Duration = 2,
-            Icon = "rotate-ccw"
-        })
-    end
-})
-
---------------------------------------------------------------------------------
--- TAB 3: MOVEMENT
---------------------------------------------------------------------------------
-local MoveTab = Window:Tab({
-    Title = "Movement",
-    Icon = "zap"
-})
-
-local MoveSection = MoveTab:Section({
-    Title = "Movement Configuration",
-    Opened = true
-})
-
--- MOVEMENT SPEED CHANGER (0 to 350 studs/s, applied instantly)
-local UnifiedSpeedSlider = MoveSection:Slider({
-    Title = "Movement Speed",
-    Desc = "Adjust tween speed from 0 to 350 studs/s (applied instantly)",
-    Value = {
-        Min = 0,
-        Max = 350,
-        Default = 60
-    },
-    Step = 1,
-    Callback = function(val)
-        Config.Speed = val
-        updateStatusUI()
-        pcall(function()
-            local hrp = getHRP()
-            if State.Enabled and State.ActiveTween and State.CurrentTargetPos and hrp then
-                State.ActiveTween:Cancel()
-            end
-            local hum = getHumanoid()
-            if hum then
-                hum.WalkSpeed = math.max(val, 16)
-            end
-        end)
-    end
-})
-UIControls.SliderSpeed = UnifiedSpeedSlider
-
-local MoveModifiersSection = MoveTab:Section({
-    Title = "Movement Modifiers",
-    Opened = true
-})
-
-UIControls.ToggleNoclip = MoveModifiersSection:Toggle({
-    Title = "Noclip During Tween",
-    Desc = "Disables player collision during tweening to prevent snagging on walls/trees",
-    Value = true,
-    Callback = function(state)
-        Config.NoclipOnTween = state
-    end
-})
-
---------------------------------------------------------------------------------
--- TAB 4: EGG PANEL & ESP
---------------------------------------------------------------------------------
-local EggPanelTab = Window:Tab({
-    Title = "Egg Panel",
-    Icon = "layout-grid"
-})
-
-local EggPanelSection = EggPanelTab:Section({
-    Title = "Egg Panel & Live ESP",
-    Opened = true
-})
-
-EggPanelSection:Button({
-    Title = "Open Panel",
-    Desc = "Open the live Egg Panel showing all available eggs, luck values, and reset countdown",
-    Callback = function()
-        EggPanel:Open()
-    end
-})
-
-UIControls.ToggleEggESP = EggPanelSection:Toggle({
-    Title = "Egg ESP",
-    Desc = "Display real-time 3D markers on eggs with egg type, luck value, and distance",
-    Value = Config.ESPEnabled,
-    Callback = function(state)
-        EggESP:SetEnabled(state)
-        WindUI:Notify({
-            Title = "Egg ESP " .. (state and "Enabled" or "Disabled"),
-            Content = state and string.format("Displaying eggs with >= %s Luck", Config.ESPMinLuck > 0 and formatValueString(Config.ESPMinLuck) or "0") or "Egg ESP markers hidden",
-            Duration = 2.5,
-            Icon = state and "eye" or "eye-off"
-        })
-    end
-})
-
-UIControls.InputESPFilter = EggPanelSection:Input({
-    Title = "ESP Manager",
-    Desc = "Set minimum luck filter (e.g. 100, 20k, 1m, 300b). Hides all eggs below this threshold",
-    Value = Config.ESPMinLuckString,
-    Placeholder = "e.g. 20k, 100k, 1m, 300b",
-    Callback = function(text)
-        local parsed = parseValueString(text)
-        Config.ESPMinLuck = parsed
-        Config.ESPMinLuckString = text
-        EggESP:SetMinLuck(parsed, text)
-        WindUI:Notify({
-            Title = "ESP Manager Updated",
-            Content = parsed > 0 and string.format("Showing eggs with >= %s Luck (hiding below)", formatValueString(parsed)) or "Showing all eggs on ESP",
-            Duration = 2.5,
-            Icon = "filter"
-        })
-    end
-})
-
---------------------------------------------------------------------------------
--- TAB 5: UTILITIES
---------------------------------------------------------------------------------
-local UtilitiesTab = Window:Tab({
-    Title = "Utilities",
-    Icon = "wrench"
-})
-
-local ShopsSection = UtilitiesTab:Section({
-    Title = "Shops",
-    Opened = true
-})
-
-ShopsSection:Button({
-    Title = "Open Gear Shop",
-    Desc = "Opens the in-game Gear Shop interface to purchase radars and equipment",
-    Callback = function()
-        pcall(function()
-            local shop = LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main:FindFirstChild("Shop")
-            if shop then
-                shop.Visible = true
-                if shop:FindFirstChild("Holders") then
-                    if shop.Holders:FindFirstChild("Gears") then shop.Holders.Gears.Visible = true end
-                    if shop.Holders:FindFirstChild("Food") then shop.Holders.Food.Visible = false end
-                end
-                if shop:FindFirstChild("Header") and shop.Header:FindFirstChild("Title") then
-                    shop.Header.Title.Text = "Gear Shop"
-                end
-            end
-            local prompt = workspace:FindFirstChild("Stalls") and workspace.Stalls:FindFirstChild("Gears") and workspace.Stalls.Gears:FindFirstChild("Rick") and workspace.Stalls.Gears.Rick:FindFirstChild("Torso") and workspace.Stalls.Gears.Rick.Torso:FindFirstChildOfClass("ProximityPrompt")
-            if prompt then fireproximityprompt(prompt) end
-        end)
-        WindUI:Notify({
-            Title = "Gear Shop Opened",
-            Content = "Gear Shop menu is now active.",
-            Duration = 2,
-            Icon = "shopping-bag"
-        })
-    end
-})
-
-ShopsSection:Button({
-    Title = "Open Food Shop",
-    Desc = "Opens the in-game Food Shop interface to purchase pet food (Grass, Bone, Meat, etc.)",
-    Callback = function()
-        pcall(function()
-            local shop = LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main:FindFirstChild("Shop")
-            if shop then
-                shop.Visible = true
-                if shop:FindFirstChild("Holders") then
-                    if shop.Holders:FindFirstChild("Food") then shop.Holders.Food.Visible = true end
-                    if shop.Holders:FindFirstChild("Gears") then shop.Holders.Gears.Visible = false end
-                end
-                if shop:FindFirstChild("Header") and shop.Header:FindFirstChild("Title") then
-                    shop.Header.Title.Text = "Food Shop"
-                end
-            end
-            local prompt = workspace:FindFirstChild("Stalls") and workspace.Stalls:FindFirstChild("Food") and workspace.Stalls.Food:FindFirstChild("Tim") and workspace.Stalls.Food.Tim:FindFirstChild("HumanoidRootPart") and workspace.Stalls.Food.Tim.HumanoidRootPart:FindFirstChildOfClass("ProximityPrompt")
-            if prompt then fireproximityprompt(prompt) end
-        end)
-        WindUI:Notify({
-            Title = "Food Shop Opened",
-            Content = "Food Shop menu is now active.",
-            Duration = 2,
-            Icon = "utensils"
-        })
-    end
-})
-
-local UtilsAutoSection = UtilitiesTab:Section({
-    Title = "Automation",
-    Opened = true
-})
-
-UIControls.ToggleAutoIndex = UtilsAutoSection:Toggle({
-    Title = "Auto Collect Index",
-    Desc = "Continuously and automatically claims available Index pet discovery rewards",
-    Value = false,
-    Callback = function(state)
-        UtilitiesConfig.AutoIndex = state
-        WindUI:Notify({
-            Title = "Auto Collect Index",
-            Content = state and "Auto claiming index rewards enabled!" or "Auto collect index disabled.",
-            Duration = 2,
-            Icon = state and "check" or "x"
-        })
-    end
-})
-
-UIControls.ToggleAutoRebirth = UtilsAutoSection:Toggle({
-    Title = "Auto Rebirth",
-    Desc = "Automatically triggers Rebirth as soon as requirements (cash & pet) are met",
-    Value = false,
-    Callback = function(state)
-        UtilitiesConfig.AutoRebirth = state
-        WindUI:Notify({
-            Title = "Auto Rebirth",
-            Content = state and "Auto rebirth enabled!" or "Auto rebirth disabled.",
-            Duration = 2,
-            Icon = state and "check" or "x"
-        })
-    end
-})
-
-UIControls.ToggleAutoHatchLuck = UtilsAutoSection:Toggle({
-    Title = "Auto Upgrade Hatch Luck",
-    Desc = "Automatically purchases Hatch Luck upgrades on your plot whenever affordable",
-    Value = false,
-    Callback = function(state)
-        UtilitiesConfig.AutoHatchLuck = state
-        WindUI:Notify({
-            Title = "Auto Upgrade Hatch Luck",
-            Content = state and "Auto upgrading hatch luck enabled!" or "Auto upgrade hatch luck disabled.",
-            Duration = 2,
-            Icon = state and "check" or "x"
-        })
-    end
-})
-
-local function getPlayerCash()
-    local sd = LocalPlayer:FindFirstChild("SavedData")
-    if sd and sd:FindFirstChild("Cash") and typeof(sd.Cash.Value) == "number" then
-        return sd.Cash.Value
-    end
-    local ls = LocalPlayer:FindFirstChild("leaderstats")
-    if ls and ls:FindFirstChild("Cash") and typeof(ls.Cash.Value) == "number" then
-        return ls.Cash.Value
-    end
-    return 0
-end
-
-local function canPlayerRebirth()
-    local rep = game:GetService("ReplicatedStorage")
-    local gd = rep:FindFirstChild("GameData")
-    if not gd then return false end
-
-    local rebirthsMod = gd:FindFirstChild("Rebirths")
-    local generalMod = gd:FindFirstChild("General")
-    if not rebirthsMod or not generalMod then return false end
-
-    local success1, rebirthsData = pcall(require, rebirthsMod)
-    local success2, generalData = pcall(require, generalMod)
-    if not success1 or not success2 or type(rebirthsData) ~= "table" or type(generalData) ~= "table" then
-        return false
-    end
-
-    local sd = LocalPlayer:FindFirstChild("SavedData")
-    local currentRebirths = 0
-    if sd and sd:FindFirstChild("Rebirths") and typeof(sd.Rebirths.Value) == "number" then
-        currentRebirths = sd.Rebirths.Value
-    end
-
-    local cap = rebirthsData.Cap or 6
-    if currentRebirths >= cap then
-        return false -- Max rebirths reached
-    end
-
-    local nextIndex = currentRebirths + 1
-
-    -- 1. Cost requirement check
-    local cost = nil
-    if rebirthsData.RiggedCost and type(rebirthsData.RiggedCost) == "table" then
-        cost = rebirthsData.RiggedCost[nextIndex]
-    end
-    if not cost and type(rebirthsData.GetCost) == "function" then
-        pcall(function()
-            cost = rebirthsData.GetCost(nextIndex)
-        end)
-    end
-    if not cost then
-        local init = rebirthsData.InitialCost or 1000000
-        local mult = rebirthsData.CostMultiplier or 50
-        cost = init * (mult ^ (nextIndex - 1))
-    end
-
-    local cash = getPlayerCash()
-    if cash < (cost or math.huge) then
-        return false -- Insufficient cash
-    end
-
-    -- 2. Pet requirement check
-    local requiredPet = nil
-    if generalData.RebirthRequirements and type(generalData.RebirthRequirements) == "table" then
-        requiredPet = generalData.RebirthRequirements[nextIndex]
-    end
-
-    if requiredPet and requiredPet ~= "" then
-        local ownedPetsStr = ""
-        if sd and sd:FindFirstChild("OwnedPets") then
-            ownedPetsStr = tostring(sd.OwnedPets.Value or "")
-        end
-
-        local hasPet = false
-        -- Check exact comma-delimited match (e.g. ",Fox,")
-        if string.find("," .. ownedPetsStr .. ",", "," .. requiredPet .. ",") then
-            hasPet = true
-        else
-            -- Case-insensitive match across individual pet tokens
-            local lowerReq = string.lower(string.gsub(requiredPet, "%s+", ""))
-            for pet in string.gmatch(string.lower(ownedPetsStr), "([^,]+)") do
-                if string.gsub(pet, "%s+", "") == lowerReq then
-                    hasPet = true
-                    break
-                end
-            end
-        end
-
-        -- Check equipped / character pets
-        if not hasPet then
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild(requiredPet) then
-                hasPet = true
-            end
-        end
-
-        if not hasPet then
-            return false -- Missing required pet
-        end
-    end
-
-    return true
-end
-
-local lastRebirthAttempt = 0
-
-local function getHatchLuckUpgradeDetails()
-    local plot = getPlayerPlot() or (workspace:FindFirstChild("Plots") and workspace.Plots:FindFirstChild("Plot"))
-    local pgui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not pgui then return nil end
-
-    local maxBtn, maxCost
-    local singleBtn, singleCost
-
-    for _, g in ipairs(pgui:GetChildren()) do
-        if g:IsA("SurfaceGui") and g.Adornee and (not plot or g.Adornee:IsDescendantOf(plot)) then
-            if g.Name == "MaxUpgrade" or g.Name == "MaxUpgradeInput" then
-                local btn = g:FindFirstChild("Purchase")
-                if btn and btn:IsA("GuiButton") then maxBtn = btn end
-                for _, d in ipairs(g:GetDescendants()) do
-                    if d:IsA("TextLabel") and string.find(d.Text, "%$") then
-                        local parsed = parseValueString(d.Text)
-                        if parsed and parsed > 0 then
-                            maxCost = parsed
-                            break
-                        end
-                    end
-                end
-            elseif g.Name == "Upgrade" or g.Name == "UpgradeInput" then
-                local btn = g:FindFirstChild("Purchase")
-                if btn and btn:IsA("GuiButton") then singleBtn = btn end
-                for _, d in ipairs(g:GetDescendants()) do
-                    if d:IsA("TextLabel") and string.find(d.Text, "%$") then
-                        local parsed = parseValueString(d.Text)
-                        if parsed and parsed > 0 then
-                            singleCost = parsed
-                            break
-                        end
+                    local _lIdx = _sym - 257 + 1
+                    local _len = _L_BASE[_lIdx] + _getBits(_L_BITS[_lIdx])
+                    local _dIdx = _decodeHuffman(_dt) + 1
+                    local _dist = _D_BASE[_dIdx] + _getBits(_D_BITS[_dIdx])
+                    for _ = 1, _len do
+                        _out[_outIdx] = _out[_outIdx - _dist]
+                        _outIdx = _outIdx + 1
                     end
                 end
             end
         end
     end
 
-    -- Fallback calculation via ReplicatedStorage.GameData.HatchLuck
-    if not maxCost or maxCost <= 0 then
-        pcall(function()
-            local rep = game:GetService("ReplicatedStorage")
-            local gd = rep:FindFirstChild("GameData")
-            if gd and gd:FindFirstChild("HatchLuck") then
-                local hl = require(gd.HatchLuck)
-                local sd = LocalPlayer:FindFirstChild("SavedData")
-                local curUpgrades = sd and sd:FindFirstChild("HatchUpgrades") and sd.HatchUpgrades.Value or 0
-                if hl.GetPrice then
-                    singleCost = singleCost or hl.GetPrice(curUpgrades)
-                end
-            end
-        end)
+    -- Convert decoded bytes to string in fast chunks
+    local _chunks = {}
+    local _chunkLimit = 4096
+    local _total = #_out
+    for _idx = 1, _total, _chunkLimit do
+        local _end = math.min(_idx + _chunkLimit - 1, _total)
+        local _t = table.create(_end - _idx + 1)
+        for _m = _idx, _end do
+            _t[_m - _idx + 1] = string.char(_out[_m])
+        end
+        table.insert(_chunks, table.concat(_t))
     end
-
-    return {
-        MaxButton = maxBtn,
-        MaxCost = maxCost,
-        SingleButton = singleBtn,
-        SingleCost = singleCost
-    }
+    return table.concat(_chunks)
 end
 
--- Background runner for Utilities automation
-task.spawn(function()
-    while true do
-        if UtilitiesConfig.AutoIndex then
-            pcall(function()
-                local rep = game:GetService("ReplicatedStorage")
-                local remote = rep:FindFirstChild("Remotes") and rep.Remotes:FindFirstChild("Game") and rep.Remotes.Game:FindFirstChild("ClaimIndexReward")
-                if remote then remote:FireServer() end
-                local claimBtn = LocalPlayer.PlayerGui:FindFirstChild("Main")
-                    and LocalPlayer.PlayerGui.Main:FindFirstChild("Index")
-                    and LocalPlayer.PlayerGui.Main.Index:FindFirstChild("PetProgress")
-                    and LocalPlayer.PlayerGui.Main.Index.PetProgress:FindFirstChild("Claim")
-                if claimBtn and claimBtn:IsA("GuiButton") and claimBtn.Visible then
-                    if firesignal then firesignal(claimBtn.Activated) end
-                end
-            end)
-        end
-        if UtilitiesConfig.AutoRebirth then
-            pcall(function()
-                local now = os.clock()
-                if now - lastRebirthAttempt < 3 then return end
-
-                -- Strictly verify all requirements (cash & pet) before attempting rebirth
-                if not canPlayerRebirth() then return end
-
-                lastRebirthAttempt = now
-                local rep = game:GetService("ReplicatedStorage")
-                local remote = rep:FindFirstChild("Remotes") and rep.Remotes:FindFirstChild("Game") and rep.Remotes.Game:FindFirstChild("Rebirth")
-                if remote then remote:FireServer() end
-                local rebirthBtn = LocalPlayer.PlayerGui:FindFirstChild("Main")
-                    and LocalPlayer.PlayerGui.Main:FindFirstChild("Rebirth")
-                    and LocalPlayer.PlayerGui.Main.Rebirth:FindFirstChild("Rebirth")
-                if rebirthBtn and rebirthBtn:IsA("GuiButton") and rebirthBtn.Visible then
-                    if firesignal then firesignal(rebirthBtn.Activated) end
-                end
-            end)
-        end
-        if UtilitiesConfig.AutoHatchLuck then
-            pcall(function()
-                local cash = getPlayerCash()
-                local details = getHatchLuckUpgradeDetails()
-                if not details then return end
-
-                -- Strictly verify the player has enough money before attempting to purchase the maximum Hatch Luck upgrade
-                if details.MaxButton and details.MaxCost and cash >= details.MaxCost then
-                    if firesignal then
-                        firesignal(details.MaxButton.Activated)
-                    else
-                        local conns = getconnections and getconnections(details.MaxButton.Activated) or {}
-                        for _, c in ipairs(conns) do pcall(c.Function) end
-                    end
-                elseif details.SingleButton and details.SingleCost and cash >= details.SingleCost then
-                    if firesignal then
-                        firesignal(details.SingleButton.Activated)
-                    else
-                        local conns = getconnections and getconnections(details.SingleButton.Activated) or {}
-                        for _, c in ipairs(conns) do pcall(c.Function) end
-                    end
-                end
-            end)
-        end
-        task.wait(1.5)
-    end
-end)
-
---------------------------------------------------------------------------------
--- TAB 6: WEBHOOK NOTIFICATIONS
---------------------------------------------------------------------------------
-local WebhookTab = Window:Tab({
-    Title = "Webhook",
-    Icon = "bell"
-})
-
-local WebhookConfigSection = WebhookTab:Section({
-    Title = "Discord Webhook Setup",
-    Opened = true
-})
-
-UIControls.ToggleWebhook = WebhookConfigSection:Toggle({
-    Title = "Enable Discord Webhook",
-    Desc = "Toggles sending real-time egg farming & weather alerts to your Discord channel",
-    Value = false,
-    Callback = function(state)
-        Config.WebhookEnabled = state
-        if state and Config.WeatherNotifications and Config.WebhookURL ~= "" then
-            task.spawn(function()
-                sendWeatherWebhook("Current Weather")
-            end)
-        end
-        WindUI:Notify({
-            Title = "Webhook Notifications",
-            Content = state and "Webhook alerts enabled!" or "Webhook alerts disabled.",
-            Duration = 2.5,
-            Icon = state and "check-circle" or "x-circle"
-        })
-    end
-})
-
-UIControls.InputWebhookURL = WebhookConfigSection:Input({
-    Title = "Discord Webhook URL",
-    Desc = "Enter your Discord channel webhook URL",
-    Value = Config.WebhookURL,
-    Placeholder = "https://discord.com/api/webhooks/...",
-    Callback = function(text)
-        local wasEmpty = (Config.WebhookURL == "" or Config.WebhookURL == nil)
-        Config.WebhookURL = text or ""
-        if wasEmpty and Config.WebhookURL ~= "" and Config.WebhookEnabled and Config.WeatherNotifications then
-            task.spawn(function()
-                sendWeatherWebhook("Current Weather")
-            end)
-        end
-    end
-})
-
-WebhookConfigSection:Button({
-    Title = "Test Webhook Notification",
-    Desc = "Sends a sample embed to test that your webhook URL works properly",
-    Callback = function()
-        if Config.WebhookURL == "" then
-            WindUI:Notify({
-                Title = "Webhook Error",
-                Content = "Please enter a valid Discord webhook URL first!",
-                Duration = 3,
-                Icon = "alert-triangle"
-            })
-            return
-        end
-
-        local originalEnabled = Config.WebhookEnabled
-        Config.WebhookEnabled = true
-        sendDiscordWebhook({
-            title = "❄️ Frost Hub Webhook Connected!",
-            description = "Your Discord webhook has been successfully configured and verified.",
-            color = 0x3498db,
-            fields = {
-                { name = "Status", value = "Connected & Active", inline = true },
-                { name = "Game", value = "Ride A Pet", inline = true },
-                { name = "Active Speed", value = tostring(Config.Speed) .. " studs/s", inline = true },
-                { name = "Movement Mode", value = Config.MovementMode, inline = true },
-                { name = "Egg Notifications", value = Config.EggNotifications and "Enabled" or "Disabled", inline = true },
-                { name = "Weather Alerts", value = Config.WeatherNotifications and "Enabled" or "Disabled", inline = true },
-            },
-            footer = { text = "❄️ Frost Hub • Webhook Diagnostics" },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-        })
-        Config.WebhookEnabled = originalEnabled
-
-        WindUI:Notify({
-            Title = "Test Sent",
-            Content = "Test payload dispatched to your Discord webhook!",
-            Duration = 3,
-            Icon = "send"
-        })
-    end
-})
-
-local WebhookTriggersSection = WebhookTab:Section({
-    Title = "Notification Preferences",
-    Opened = true
-})
-
-UIControls.ToggleEggNotifications = WebhookTriggersSection:Toggle({
-    Title = "Egg Notifications",
-    Desc = "Send egg stats whenever an egg is collected and deposited",
-    Value = Config.EggNotifications,
-    Callback = function(state)
-        Config.EggNotifications = state
-    end
-})
-
-UIControls.ToggleWeatherNotifications = WebhookTriggersSection:Toggle({
-    Title = "Weather Notifications",
-    Desc = "Send notification for each weather event and when weather changes",
-    Value = Config.WeatherNotifications,
-    Callback = function(state)
-        Config.WeatherNotifications = state
-        if state and Config.WebhookEnabled and Config.WebhookURL ~= "" then
-            task.spawn(function()
-                sendWeatherWebhook("Current Weather")
-            end)
-        end
-    end
-})
-
---------------------------------------------------------------------------------
--- TAB 7: CONFIGURATIONS (MULTI-PROFILE MANAGER)
---------------------------------------------------------------------------------
-local ConfigurationsTab = Window:Tab({
-    Title = "Configurations",
-    Icon = "folder-cog"
-})
-
-local CONFIGS_FILE = "FrostHub/configurations.json"
-local LEGACY_CONFIG_FILE = "FrostHub/config.json"
-
-local function ensureConfigFolder()
-    pcall(function()
-        if isfolder and not isfolder("FrostHub") and makefolder then
-            makefolder("FrostHub")
-        end
-    end)
+-- Reconstruct & Execute Source in Memory
+local _SRC = _INFLATE(_DEC_BYTES)
+local _EXEC = loadstring or (getgenv and getgenv().loadstring) or (_G and _G.loadstring)
+if not _EXEC then
+    error("Execution environment does not support loadstring.")
 end
 
-local function captureCurrentSettings()
-    return {
-        AutoCollect = State.Enabled,
-        CollectByLuck = Config.CollectByLuck,
-        MinLuckString = Config.MinLuckString or "1m",
-        Speed = Config.Speed or 60,
-        NoclipOnTween = Config.NoclipOnTween,
-        EggESP = (EggESP and EggESP.Enabled) or false,
-        ESPMinLuckString = Config.ESPMinLuckString or "0",
-        AutoIndex = (UtilitiesConfig and UtilitiesConfig.AutoIndex) or false,
-        AutoRebirth = (UtilitiesConfig and UtilitiesConfig.AutoRebirth) or false,
-        AutoHatchLuck = (UtilitiesConfig and UtilitiesConfig.AutoHatchLuck) or false,
-        WebhookEnabled = Config.WebhookEnabled or false,
-        WebhookURL = Config.WebhookURL or "",
-        EggNotifications = Config.EggNotifications ~= false,
-        WeatherNotifications = Config.WeatherNotifications ~= false,
-        HUDScale = Config.HUDScale or 100,
-        SavedAt = os.date("%Y-%m-%d %H:%M:%S"),
-        SavedTimestamp = os.time()
-    }
+local _FUNC, _ERR = _EXEC(_SRC, "=FrostHub")
+if not _FUNC then
+    error("Frost Hub load error: " .. tostring(_ERR))
 end
 
-local function loadAllConfigsFromDisk()
-    ensureConfigFolder()
-    local store = {
-        Active = "Default",
-        Configs = {}
-    }
-
-    if isfile and isfile(CONFIGS_FILE) then
-        local raw = readfile(CONFIGS_FILE)
-        local success, parsed = pcall(function()
-            return HttpService:JSONDecode(raw)
-        end)
-        if success and typeof(parsed) == "table" and parsed.Configs and typeof(parsed.Configs) == "table" then
-            return parsed
-        end
-    end
-
-    -- Check for legacy single-config file to import
-    if isfile and isfile(LEGACY_CONFIG_FILE) then
-        pcall(function()
-            local raw = readfile(LEGACY_CONFIG_FILE)
-            local legacy = HttpService:JSONDecode(raw)
-            if legacy and typeof(legacy) == "table" then
-                store.Configs["Default"] = legacy
-                store.Active = "Default"
-            end
-        end)
-    end
-
-    if not store.Configs["Default"] then
-        store.Configs["Default"] = captureCurrentSettings()
-    end
-
-    return store
-end
-
-local function saveAllConfigsToDisk(store)
-    ensureConfigFolder()
-    if not (writefile and isfolder) then return false end
-    local success, jsonStr = pcall(function()
-        return HttpService:JSONEncode(store)
-    end)
-    if success and jsonStr then
-        writefile(CONFIGS_FILE, jsonStr)
-        return true
-    end
-    return false
-end
-
-local function getConfigNamesList(store)
-    local list = {}
-    for name, _ in pairs(store.Configs or {}) do
-        table.insert(list, tostring(name))
-    end
-    table.sort(list, function(a, b)
-        if string.lower(a) == "default" then return true end
-        if string.lower(b) == "default" then return false end
-        return string.lower(a) < string.lower(b)
-    end)
-    if #list == 0 then
-        table.insert(list, "Default")
-    end
-    return list
-end
-
-local configStore = loadAllConfigsFromDisk()
-local currentSelectedConfig = configStore.Active or "Default"
-local configNames = getConfigNamesList(configStore)
-
--- SECTION 1: PROFILES & SELECTION
-local ConfigSelectSection = ConfigurationsTab:Section({
-    Title = "Configuration Profiles",
-    Opened = true
-})
-
-local ConfigOverviewParagraph = ConfigSelectSection:Paragraph({
-    Title = "◈ Configuration Overview",
-    Desc = "Loading configurations..."
-})
-
-local function updateConfigOverviewDisplay()
-    pcall(function()
-        if not ConfigOverviewParagraph then return end
-        local totalCount = #getConfigNamesList(configStore)
-        local targetData = configStore.Configs[currentSelectedConfig]
-        local lastSaved = "Never"
-        if targetData and targetData.SavedAt then
-            lastSaved = tostring(targetData.SavedAt)
-        end
-        ConfigOverviewParagraph:SetDesc(string.format(
-            "• Selected Profile: %s\n• Total Saved: %d configurations\n• Last Saved: %s\n• Storage: FrostHub/configurations.json",
-            tostring(currentSelectedConfig),
-            totalCount,
-            lastSaved
-        ))
-    end)
-end
-
-local DropdownConfigs = ConfigSelectSection:Dropdown({
-    Title = "Select Configuration",
-    Desc = "Choose a saved configuration profile to load, update, or manage",
-    Values = configNames,
-    Value = currentSelectedConfig,
-    Callback = function(choice)
-        if choice and choice ~= "" then
-            currentSelectedConfig = choice
-            configStore.Active = choice
-            updateConfigOverviewDisplay()
-        end
-    end
-})
-
-ConfigSelectSection:Button({
-    Title = "📂 Load Configuration",
-    Desc = "Restores all settings from the selected configuration profile",
-    Callback = function()
-        pcall(function()
-            local targetData = configStore.Configs[currentSelectedConfig]
-            if not targetData then
-                WindUI:Notify({
-                    Title = "Config Error",
-                    Content = "Configuration '" .. tostring(currentSelectedConfig) .. "' not found!",
-                    Duration = 3.5,
-                    Icon = "circle-alert"
-                })
-                return
-            end
-
-            -- Apply Settings safely through UI controls
-            -- 1. Movement & Tween Speed
-            if targetData.Speed ~= nil then
-                Config.Speed = tonumber(targetData.Speed) or 60
-                if UIControls.SliderSpeed then
-                    pcall(function() UIControls.SliderSpeed:Set(Config.Speed) end)
-                end
-            end
-            if targetData.NoclipOnTween ~= nil then
-                Config.NoclipOnTween = (targetData.NoclipOnTween == true)
-                if UIControls.ToggleNoclip then
-                    pcall(function() UIControls.ToggleNoclip:Set(Config.NoclipOnTween) end)
-                end
-            end
-
-            -- 2. Egg Luck Filtering
-            if targetData.MinLuckString ~= nil then
-                local parsed = parseValueString(tostring(targetData.MinLuckString))
-                Config.MinLuck = parsed > 0 and parsed or 1000000
-                Config.MinLuckString = tostring(targetData.MinLuckString)
-                Config.MinValue = Config.MinLuck
-                Config.MinValueString = Config.MinLuckString
-                if UIControls.InputLuckFilter then
-                    pcall(function() UIControls.InputLuckFilter:Set(Config.MinLuckString) end)
-                end
-            end
-            if targetData.CollectByLuck ~= nil then
-                Config.CollectByLuck = (targetData.CollectByLuck == true)
-                Config.CollectByValue = Config.CollectByLuck
-                if UIControls.ToggleLuckFilter then
-                    pcall(function() UIControls.ToggleLuckFilter:Set(Config.CollectByLuck) end)
-                end
-            end
-
-            -- 3. Egg ESP & Filter
-            if targetData.ESPMinLuckString ~= nil then
-                local parsed = parseValueString(tostring(targetData.ESPMinLuckString))
-                Config.ESPMinLuck = parsed
-                Config.ESPMinLuckString = tostring(targetData.ESPMinLuckString)
-                if EggESP and EggESP.SetMinLuck then
-                    pcall(function() EggESP:SetMinLuck(parsed, Config.ESPMinLuckString) end)
-                end
-                if UIControls.InputESPFilter then
-                    pcall(function() UIControls.InputESPFilter:Set(Config.ESPMinLuckString) end)
-                end
-            end
-            if targetData.EggESP ~= nil then
-                Config.ESPEnabled = (targetData.EggESP == true)
-                if EggESP and EggESP.SetEnabled then
-                    pcall(function() EggESP:SetEnabled(Config.ESPEnabled) end)
-                end
-                if UIControls.ToggleEggESP then
-                    pcall(function() UIControls.ToggleEggESP:Set(Config.ESPEnabled) end)
-                end
-            end
-
-            -- 4. Utilities Automation
-            if targetData.AutoIndex ~= nil then
-                UtilitiesConfig.AutoIndex = (targetData.AutoIndex == true)
-                if UIControls.ToggleAutoIndex then
-                    pcall(function() UIControls.ToggleAutoIndex:Set(UtilitiesConfig.AutoIndex) end)
-                end
-            end
-            if targetData.AutoRebirth ~= nil then
-                UtilitiesConfig.AutoRebirth = (targetData.AutoRebirth == true)
-                if UIControls.ToggleAutoRebirth then
-                    pcall(function() UIControls.ToggleAutoRebirth:Set(UtilitiesConfig.AutoRebirth) end)
-                end
-            end
-            if targetData.AutoHatchLuck ~= nil then
-                UtilitiesConfig.AutoHatchLuck = (targetData.AutoHatchLuck == true)
-                if UIControls.ToggleAutoHatchLuck then
-                    pcall(function() UIControls.ToggleAutoHatchLuck:Set(UtilitiesConfig.AutoHatchLuck) end)
-                end
-            end
-
-            -- 5. Webhook Setup & Preferences
-            if targetData.WebhookURL ~= nil then
-                Config.WebhookURL = tostring(targetData.WebhookURL)
-                if UIControls.InputWebhookURL then
-                    pcall(function() UIControls.InputWebhookURL:Set(Config.WebhookURL) end)
-                end
-            end
-            if targetData.WebhookEnabled ~= nil then
-                Config.WebhookEnabled = (targetData.WebhookEnabled == true)
-                if UIControls.ToggleWebhook then
-                    pcall(function() UIControls.ToggleWebhook:Set(Config.WebhookEnabled) end)
-                end
-            end
-            if targetData.EggNotifications ~= nil then
-                Config.EggNotifications = (targetData.EggNotifications == true)
-                if UIControls.ToggleEggNotifications then
-                    pcall(function() UIControls.ToggleEggNotifications:Set(Config.EggNotifications) end)
-                end
-            end
-            if targetData.WeatherNotifications ~= nil then
-                Config.WeatherNotifications = (targetData.WeatherNotifications == true)
-                if UIControls.ToggleWeatherNotifications then
-                    pcall(function() UIControls.ToggleWeatherNotifications:Set(Config.WeatherNotifications) end)
-                end
-            end
-
-            -- 6. HUD Scale
-            if targetData.HUDScale ~= nil then
-                Config.HUDScale = tonumber(targetData.HUDScale) or 100
-                pcall(function() Window:SetUIScale(Config.HUDScale / 100) end)
-                if UIControls.SliderHUDScale then
-                    pcall(function() UIControls.SliderHUDScale:Set(Config.HUDScale) end)
-                end
-            end
-
-            -- 7. Auto Collect Eggs (Restored last so speed, filter & noclip are active before farming starts)
-            if targetData.AutoCollect ~= nil then
-                if UIControls.ToggleAuto then
-                    pcall(function() UIControls.ToggleAuto:Set(targetData.AutoCollect == true) end)
-                end
-            end
-
-            updateStatusUI()
-            updateConfigOverviewDisplay()
-
-            WindUI:Notify({
-                Title = "Config Loaded",
-                Content = "Loaded configuration '" .. tostring(currentSelectedConfig) .. "' successfully!",
-                Duration = 3.5,
-                Icon = "check-circle"
-            })
-        end)
-    end
-})
-
--- SECTION 2: CREATE & SAVE CONFIGURATION
-local ConfigSaveSection = ConfigurationsTab:Section({
-    Title = "Create & Save",
-    Opened = true
-})
-
-local saveInputName = ""
-local InputConfigSaveName
-InputConfigSaveName = ConfigSaveSection:Input({
-    Title = "Configuration Name",
-    Desc = "Enter a name to create a new profile or leave blank to update selected",
-    Value = "",
-    Placeholder = "e.g. Overnight Farm, Speed Farm, High Luck...",
-    Callback = function(text)
-        saveInputName = text or ""
-    end
-})
-
-ConfigSaveSection:Button({
-    Title = "💾 Save Configuration",
-    Desc = "Saves your current active settings to the specified configuration profile",
-    Callback = function()
-        pcall(function()
-            if not (writefile and isfolder and makefolder) then
-                WindUI:Notify({
-                    Title = "Config System",
-                    Content = "Your executor does not support writefile.",
-                    Duration = 4,
-                    Icon = "circle-alert"
-                })
-                return
-            end
-
-            local rawName = ""
-            if InputConfigSaveName and InputConfigSaveName.ElementFrame then
-                local tb = InputConfigSaveName.ElementFrame:FindFirstChildWhichIsA("TextBox", true)
-                if tb and tb.Text and tb.Text ~= "" then
-                    rawName = tb.Text
-                end
-            end
-            if rawName == "" and InputConfigSaveName and InputConfigSaveName.Value and InputConfigSaveName.Value ~= "" then
-                rawName = tostring(InputConfigSaveName.Value)
-            elseif rawName == "" and saveInputName and saveInputName ~= "" then
-                rawName = tostring(saveInputName)
-            end
-
-            local cleanName = string.gsub(rawName, "^%s*(.-)%s*$", "%1")
-            if cleanName == "" then
-                cleanName = currentSelectedConfig or "Default"
-            end
-
-            local currentSettings = captureCurrentSettings()
-            configStore.Configs[cleanName] = currentSettings
-            configStore.Active = cleanName
-            currentSelectedConfig = cleanName
-
-            saveAllConfigsToDisk(configStore)
-
-            local updatedList = getConfigNamesList(configStore)
-            if DropdownConfigs and DropdownConfigs.Refresh then
-                pcall(function()
-                    DropdownConfigs:Refresh(updatedList, cleanName)
-                end)
-            end
-
-            saveInputName = ""
-            if InputConfigSaveName and InputConfigSaveName.Set then
-                pcall(function() InputConfigSaveName:Set("") end)
-            end
-
-            updateConfigOverviewDisplay()
-
-            WindUI:Notify({
-                Title = "Config Saved",
-                Content = "Saved configuration '" .. cleanName .. "' successfully!",
-                Duration = 3.5,
-                Icon = "check-circle"
-            })
-        end)
-    end
-})
-
--- SECTION 3: MANAGE & DELETE
-local ConfigManageSection = ConfigurationsTab:Section({
-    Title = "Manage Profiles",
-    Opened = true
-})
-
-local renameInputName = ""
-local InputRename
-InputRename = ConfigManageSection:Input({
-    Title = "New Profile Name",
-    Desc = "Enter the new name for the currently selected configuration",
-    Value = "",
-    Placeholder = "Enter new name...",
-    Callback = function(text)
-        renameInputName = text or ""
-    end
-})
-
-ConfigManageSection:Button({
-    Title = "✏️ Rename Configuration",
-    Desc = "Renames the currently selected configuration to the new name above",
-    Callback = function()
-        pcall(function()
-            local targetToRename = (DropdownConfigs and DropdownConfigs.Value) or currentSelectedConfig or "Default"
-            local rawNew = ""
-            if InputRename and InputRename.ElementFrame then
-                local tb = InputRename.ElementFrame:FindFirstChildWhichIsA("TextBox", true)
-                if tb and tb.Text and tb.Text ~= "" then
-                    rawNew = tb.Text
-                end
-            end
-            if rawNew == "" and InputRename and InputRename.Value and InputRename.Value ~= "" then
-                rawNew = tostring(InputRename.Value)
-            elseif rawNew == "" and renameInputName and renameInputName ~= "" then
-                rawNew = tostring(renameInputName)
-            end
-
-            local cleanNew = string.gsub(rawNew, "^%s*(.-)%s*$", "%1")
-            if cleanNew == "" then
-                WindUI:Notify({
-                    Title = "Rename Error",
-                    Content = "Please enter a valid new name!",
-                    Duration = 3,
-                    Icon = "circle-alert"
-                })
-                return
-            end
-
-            if cleanNew == targetToRename then
-                WindUI:Notify({
-                    Title = "Rename Notice",
-                    Content = "The new name is identical to the current name.",
-                    Duration = 3,
-                    Icon = "info"
-                })
-                return
-            end
-
-            if configStore.Configs[cleanNew] then
-                WindUI:Notify({
-                    Title = "Rename Error",
-                    Content = "A configuration named '" .. cleanNew .. "' already exists!",
-                    Duration = 3.5,
-                    Icon = "circle-alert"
-                })
-                return
-            end
-
-            local oldTarget = configStore.Configs[targetToRename]
-            if not oldTarget then
-                WindUI:Notify({
-                    Title = "Rename Error",
-                    Content = "Selected configuration not found!",
-                    Duration = 3,
-                    Icon = "circle-alert"
-                })
-                return
-            end
-
-            configStore.Configs[cleanNew] = oldTarget
-            configStore.Configs[targetToRename] = nil
-            currentSelectedConfig = cleanNew
-            configStore.Active = cleanNew
-
-            saveAllConfigsToDisk(configStore)
-
-            local updatedList = getConfigNamesList(configStore)
-            if DropdownConfigs and DropdownConfigs.Refresh then
-                pcall(function()
-                    DropdownConfigs:Refresh(updatedList, cleanNew)
-                end)
-            end
-
-            renameInputName = ""
-            if InputRename and InputRename.Set then
-                pcall(function() InputRename:Set("") end)
-            end
-
-            updateConfigOverviewDisplay()
-
-            WindUI:Notify({
-                Title = "Config Renamed",
-                Content = "Renamed to '" .. cleanNew .. "' successfully!",
-                Duration = 3.5,
-                Icon = "check-circle"
-            })
-        end)
-    end
-})
-
-ConfigManageSection:Button({
-    Title = "🗑️ Delete Configuration",
-    Desc = "Deletes the currently selected configuration profile",
-    Callback = function()
-        pcall(function()
-            local targetToDelete = (DropdownConfigs and DropdownConfigs.Value) or currentSelectedConfig or "Default"
-            if not configStore.Configs[targetToDelete] then
-                WindUI:Notify({
-                    Title = "Delete Error",
-                    Content = "Selected configuration not found!",
-                    Duration = 3,
-                    Icon = "circle-alert"
-                })
-                return
-            end
-
-            configStore.Configs[targetToDelete] = nil
-
-            local remainingNames = getConfigNamesList(configStore)
-            if #remainingNames == 0 or (remainingNames[1] == "Default" and not configStore.Configs["Default"]) then
-                configStore.Configs["Default"] = captureCurrentSettings()
-                remainingNames = {"Default"}
-            end
-
-            currentSelectedConfig = remainingNames[1]
-            configStore.Active = currentSelectedConfig
-
-            saveAllConfigsToDisk(configStore)
-
-            if DropdownConfigs and DropdownConfigs.Refresh then
-                pcall(function()
-                    DropdownConfigs:Refresh(remainingNames, currentSelectedConfig)
-                end)
-            end
-
-            updateConfigOverviewDisplay()
-
-            WindUI:Notify({
-                Title = "Config Deleted",
-                Content = "Deleted configuration '" .. targetToDelete .. "'!",
-                Duration = 3.5,
-                Icon = "trash-2"
-            })
-        end)
-    end
-})
-
-updateConfigOverviewDisplay()
-
-
---------------------------------------------------------------------------------
--- TAB 8: SETTINGS & HUD CUSTOMIZATION
---------------------------------------------------------------------------------
-local SettingsTab = Window:Tab({
-    Title = "Settings",
-    Icon = "settings"
-})
-
-local AppearanceSection = SettingsTab:Section({
-    Title = "Window Controls",
-    Opened = true
-})
-
-UIControls.SliderHUDScale = AppearanceSection:Slider({
-    Title = "HUD Scale",
-    Desc = "Adjust size of the entire HUD (80% to 150%)",
-    Value = {
-        Min = 80,
-        Max = 150,
-        Default = 100
-    },
-    Step = 5,
-    Callback = function(scalePercent)
-        Config.HUDScale = scalePercent
-        pcall(function()
-            Window:SetUIScale(scalePercent / 100)
-        end)
-    end
-})
-
-AppearanceSection:Button({
-    Title = "Center Window",
-    Desc = "Re-centers the Frost Hub window on your screen",
-    Callback = function()
-        Window:SetToTheCenter()
-    end
-})
-
-
---------------------------------------------------------------------------------
--- MINIMIZED FROST HUB LOGO BOX
---------------------------------------------------------------------------------
-local function setupMinimizedLogoBox()
-    local parentGui = (gethui and gethui()) or CoreGui:FindFirstChild("RobloxGui") or CoreGui or (LocalPlayer and LocalPlayer:WaitForChild("PlayerGui"))
-    
-    local oldLogoGui = parentGui:FindFirstChild("FrostHub_LogoBoxGui")
-    if oldLogoGui then
-        pcall(function() oldLogoGui:Destroy() end)
-    end
-    if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
-        local oldPg = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_LogoBoxGui")
-        if oldPg then pcall(function() oldPg:Destroy() end) end
-    end
-    
-    local logoScreenGui = Instance.new("ScreenGui")
-    logoScreenGui.Name = "FrostHub_LogoBoxGui"
-    logoScreenGui.ResetOnSpawn = false
-    logoScreenGui.DisplayOrder = 999999
-    logoScreenGui.Enabled = true
-    logoScreenGui.Parent = parentGui
-    
-    local logoBox = Instance.new("ImageButton")
-    logoBox.Name = "FrostHubLogoBox"
-    logoBox.Size = UDim2.fromOffset(50, 50)
-    logoBox.Position = UDim2.new(0, 20, 0, 140)
-    logoBox.AnchorPoint = Vector2.new(0, 0)
-    logoBox.BackgroundColor3 = Color3.fromRGB(42, 42, 44)
-    logoBox.BackgroundTransparency = 0.05
-    logoBox.AutoButtonColor = false
-    logoBox.BorderSizePixel = 0
-    logoBox.Visible = false
-    logoBox.ZIndex = 100
-    logoBox.Parent = logoScreenGui
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 14)
-    corner.Parent = logoBox
-    
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1.4
-    stroke.Color = Color3.fromRGB(68, 68, 74)
-    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    stroke.Parent = logoBox
-    
-    local glow = Instance.new("ImageLabel")
-    glow.Name = "Glow"
-    glow.Size = UDim2.new(1, 24, 1, 24)
-    glow.Position = UDim2.new(0.5, 0, 0.5, 0)
-    glow.AnchorPoint = Vector2.new(0.5, 0.5)
-    glow.BackgroundTransparency = 1
-    glow.Image = "rbxassetid://5554236805"
-    glow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    glow.ImageTransparency = 0.55
-    glow.ScaleType = Enum.ScaleType.Slice
-    glow.SliceCenter = Rect.new(23, 23, 277, 277)
-    glow.ZIndex = 99
-    glow.Parent = logoBox
-    
-    local icon = Instance.new("ImageLabel")
-    icon.Name = "LogoIcon"
-    icon.Size = UDim2.fromOffset(28, 28)
-    icon.Position = UDim2.fromScale(0.5, 0.5)
-    icon.AnchorPoint = Vector2.new(0.5, 0.5)
-    icon.BackgroundTransparency = 1
-    icon.Image = "rbxassetid://101235206534566"
-    icon.ImageColor3 = Color3.fromRGB(240, 240, 245)
-    icon.ZIndex = 101
-    icon.Parent = logoBox
-    
-    -- Smooth Dragging Support
-    local isDragging = false
-    local dragStartPos = nil
-    local frameStartPos = nil
-    local dragMoved = false
-    
-    logoBox.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = true
-            dragStartPos = input.Position
-            frameStartPos = logoBox.Position
-            dragMoved = false
-            
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    isDragging = false
-                end
-            end)
-        end
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStartPos
-            if math.abs(delta.X) > 4 or math.abs(delta.Y) > 4 then
-                dragMoved = true
-            end
-            logoBox.Position = UDim2.new(
-                frameStartPos.X.Scale,
-                frameStartPos.X.Offset + delta.X,
-                frameStartPos.Y.Scale,
-                frameStartPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-    
-    -- Hover Animations
-    logoBox.MouseEnter:Connect(function()
-        TweenService:Create(logoBox, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            BackgroundColor3 = Color3.fromRGB(52, 52, 56)
-        }):Play()
-        TweenService:Create(icon, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            ImageColor3 = Color3.fromRGB(255, 255, 255)
-        }):Play()
-    end)
-    
-    logoBox.MouseLeave:Connect(function()
-        TweenService:Create(logoBox, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            BackgroundColor3 = Color3.fromRGB(42, 42, 44)
-        }):Play()
-        TweenService:Create(icon, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            ImageColor3 = Color3.fromRGB(240, 240, 245)
-        }):Play()
-    end)
-
-    -- Show/Hide logo box animations
-    local function showLogo()
-        if logoBox.Visible then return end
-        logoBox.Visible = true
-        logoBox.Size = UDim2.fromOffset(36, 36)
-        TweenService:Create(logoBox, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Size = UDim2.fromOffset(50, 50)
-        }):Play()
-    end
-
-    local function hideLogo()
-        if not logoBox.Visible then return end
-        local tw = TweenService:Create(logoBox, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            Size = UDim2.fromOffset(30, 30)
-        })
-        tw:Play()
-        tw.Completed:Connect(function()
-            if not logoBox.Visible then return end
-            logoBox.Visible = false
-            logoBox.Size = UDim2.fromOffset(50, 50)
-        end)
-    end
-
-    -- Reopen GUI on click
-    local function reopenGUI()
-        hideLogo()
-        pcall(function()
-            Window:Toggle()
-        end)
-    end
-
-    logoBox.MouseButton1Click:Connect(function()
-        if not dragMoved then
-            reopenGUI()
-        end
-    end)
-
-    -- Hook into WindUI Window and Minus Button
-    task.spawn(function()
-        local windowFrame = nil
-        local hasEverOpened = false
-
-        -- Wait for window frame to be created (past key validation)
-        for _ = 1, 120 do
-            pcall(function()
-                local coreGui = game:GetService("CoreGui")
-                local screenGui = (WindUI and WindUI.ScreenGui) or coreGui:FindFirstChild("WindUI", true)
-                if screenGui then
-                    local winFolder = screenGui:FindFirstChild("Window", true)
-                    if winFolder then
-                        for _, child in ipairs(winFolder:GetChildren()) do
-                            if child:IsA("Frame") and child:FindFirstChild("Main") then
-                                windowFrame = child
-                                break
-                            end
-                        end
-                        if not windowFrame then
-                            for _, child in ipairs(winFolder:GetChildren()) do
-                                if child:IsA("Frame") then
-                                    windowFrame = child
-                                    break
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-            if windowFrame then break end
-            task.wait(0.5)
-        end
-
-        if not windowFrame then return end
-
-        local function checkVisibility()
-            if not windowFrame then return end
-            if windowFrame.Visible then
-                hasEverOpened = true
-                hideLogo()
-            else
-                if hasEverOpened then
-                    showLogo()
-                end
-            end
-        end
-
-        windowFrame:GetPropertyChangedSignal("Visible"):Connect(checkVisibility)
-        if windowFrame.Visible then
-            hasEverOpened = true
-        end
-
-        -- Hook Topbar Minus Button
-        local function hookMinusButton()
-            pcall(function()
-                local topbar = windowFrame:FindFirstChild("Topbar", true)
-                if topbar then
-                    local right = topbar:FindFirstChild("Right")
-                    if right then
-                        for _, frame in ipairs(right:GetChildren()) do
-                            if frame:IsA("Frame") then
-                                local ib = frame:FindFirstChildWhichIsA("ImageButton")
-                                if ib then
-                                    local iconLabel = ib:FindFirstChildWhichIsA("ImageLabel", true)
-                                    if iconLabel and string.find(tostring(iconLabel.Image), "118026365011536") then
-                                        ib.MouseButton1Click:Connect(function()
-                                            task.wait(0.05)
-                                            if hasEverOpened and not windowFrame.Visible then
-                                                showLogo()
-                                            end
-                                        end)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-
-        hookMinusButton()
-        windowFrame.DescendantAdded:Connect(function(desc)
-            if desc:IsA("ImageButton") then
-                task.wait(0.1)
-                hookMinusButton()
-            end
-        end)
-    end)
-
-    return logoScreenGui
-end
-
--- Global Keybind to toggle HUD
-UserInputService.InputBegan:Connect(function(input, processed)
-    if not processed and (input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Enum.KeyCode.RightShift) then
-        Window:Toggle()
-    end
-end)
-
--- Initialize Minimized Logo Box
-pcall(setupMinimizedLogoBox)
-
--- Initialize & start background auto-update for Egg Panel and Egg ESP
-pcall(function()
-    EggPanel:Init()
-    EggPanel:StartAutoUpdate()
-    EggESP:Init()
-end)
-
--- Register cleanup for future reloads
-if getgenv then
-    getgenv().FrostHubEggPanel = EggPanel
-    getgenv().FrostHubEggESP = EggESP
-    getgenv().FrostHubUtilitiesConfig = UtilitiesConfig
-    getgenv().FrostHubCleanup = function()
-        pcall(function()
-            if UtilitiesConfig then
-                UtilitiesConfig.AutoIndex = false
-                UtilitiesConfig.AutoRebirth = false
-                UtilitiesConfig.AutoHatchLuck = false
-            end
-            if EggESP then EggESP:Destroy() end
-            if EggPanel and EggPanel.Gui then EggPanel.Gui:Destroy() end
-            if WeatherChangedConnection then
-                WeatherChangedConnection:Disconnect()
-                WeatherChangedConnection = nil
-            end
-            local parentGui = (gethui and gethui()) or CoreGui:FindFirstChild("RobloxGui") or CoreGui or (LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui"))
-            if parentGui then
-                local oldLogo = parentGui:FindFirstChild("FrostHub_LogoBoxGui")
-                if oldLogo then oldLogo:Destroy() end
-            end
-            if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
-                local old = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_EggPanelGui")
-                if old then old:Destroy() end
-                local oldEsp = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_ESP_Holder")
-                if oldEsp then oldEsp:Destroy() end
-                local oldLogo = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_LogoBoxGui")
-                if oldLogo then oldLogo:Destroy() end
-            end
-            local Lighting = game:GetService("Lighting")
-            local blur = Lighting:FindFirstChildOfClass("BlurEffect") or Lighting:FindFirstChild("Blur")
-            if blur and blur:IsA("BlurEffect") then blur.Enabled = false end
-            local et = LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main:FindFirstChild("EggTracker")
-            if et then et.Visible = false end
-        end)
-    end
-end
-
-print("❄️ [Frost Hub] WindUI Egg Panel & Radar Suite initialized.")
+return _FUNC()
