@@ -247,14 +247,14 @@
     },
     {
       "hwid": "7b37613735363262312d656666622d313165652d393739362d3830366536663665363936337d",
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789830340,
       "duration": "6 hours",
       "created_at": 1789808740,
       "created_by": 1276603237612654700,
       "created_by_name": "niktsik1",
       "key": "FROST-6H-56CN-VJG6",
-      "status": "Active",
+      "status": "Expired",
       "claimed_by": 1276603237612654700,
       "hwid_linked_at": 1789808749,
       "hwid_user": "Niktik897 (5231344919)"
