@@ -424,14 +424,14 @@
     },
     {
       "hwid": "0702d329bf9ea7115dfd0d55dbd1dee31e985168a8c83f090888ebf5d7e1d74c",
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789840715,
       "duration": "6 hours",
       "created_at": 1789819115,
       "created_by": 1548261066826317900,
       "created_by_name": "clint047773",
       "key": "FROST-6H-F48C-9RBL",
-      "status": "Active",
+      "status": "Expired",
       "claimed_by": 1548261066826317900,
       "hwid_linked_at": 1789819252,
       "hwid_user": "frhfgfhthhtghth (3816798857)"
