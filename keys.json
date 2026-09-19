@@ -174,14 +174,14 @@
       "claimed_by": 1475620425827614800
     },
     {
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789793777,
       "duration": "6 hours",
       "created_at": 1789772177,
       "created_by": 1424515898953437500,
       "created_by_name": "charlie.lirk",
       "key": "FROST-6H-WB7K-G27B",
-      "status": "Active",
+      "status": "Expired",
       "claimed_by": 1424515898953437500
     },
     {
