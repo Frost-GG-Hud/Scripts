@@ -3841,12 +3841,285 @@ ConfigurationSection:Button({
 })
 
 
+--------------------------------------------------------------------------------
+-- MINIMIZED FROST HUB LOGO BOX
+--------------------------------------------------------------------------------
+local function setupMinimizedLogoBox()
+    local parentGui = (gethui and gethui()) or CoreGui:FindFirstChild("RobloxGui") or CoreGui or (LocalPlayer and LocalPlayer:WaitForChild("PlayerGui"))
+    
+    local oldLogoGui = parentGui:FindFirstChild("FrostHub_LogoBoxGui")
+    if oldLogoGui then
+        pcall(function() oldLogoGui:Destroy() end)
+    end
+    if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
+        local oldPg = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_LogoBoxGui")
+        if oldPg then pcall(function() oldPg:Destroy() end) end
+    end
+    
+    local logoScreenGui = Instance.new("ScreenGui")
+    logoScreenGui.Name = "FrostHub_LogoBoxGui"
+    logoScreenGui.ResetOnSpawn = false
+    logoScreenGui.DisplayOrder = 999999
+    logoScreenGui.Enabled = true
+    logoScreenGui.Parent = parentGui
+    
+    local logoBox = Instance.new("ImageButton")
+    logoBox.Name = "FrostHubLogoBox"
+    logoBox.Size = UDim2.fromOffset(50, 50)
+    logoBox.Position = UDim2.new(0, 20, 0, 140)
+    logoBox.AnchorPoint = Vector2.new(0, 0)
+    logoBox.BackgroundColor3 = Color3.fromRGB(13, 16, 26)
+    logoBox.BackgroundTransparency = 0.15
+    logoBox.AutoButtonColor = false
+    logoBox.BorderSizePixel = 0
+    logoBox.Visible = false
+    logoBox.ZIndex = 100
+    logoBox.Parent = logoScreenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 14)
+    corner.Parent = logoBox
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1.8
+    stroke.Color = Color3.fromRGB(0, 210, 255)
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = logoBox
+    
+    local strokeGradient = Instance.new("UIGradient")
+    strokeGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 230, 255)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(70, 150, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 230, 255)),
+    })
+    strokeGradient.Rotation = 45
+    strokeGradient.Parent = stroke
+    
+    local glow = Instance.new("ImageLabel")
+    glow.Name = "Glow"
+    glow.Size = UDim2.new(1, 24, 1, 24)
+    glow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    glow.AnchorPoint = Vector2.new(0.5, 0.5)
+    glow.BackgroundTransparency = 1
+    glow.Image = "rbxassetid://5554236805"
+    glow.ImageColor3 = Color3.fromRGB(0, 180, 255)
+    glow.ImageTransparency = 0.65
+    glow.ScaleType = Enum.ScaleType.Slice
+    glow.SliceCenter = Rect.new(23, 23, 277, 277)
+    glow.ZIndex = 99
+    glow.Parent = logoBox
+    
+    local icon = Instance.new("ImageLabel")
+    icon.Name = "LogoIcon"
+    icon.Size = UDim2.fromOffset(28, 28)
+    icon.Position = UDim2.fromScale(0.5, 0.5)
+    icon.AnchorPoint = Vector2.new(0.5, 0.5)
+    icon.BackgroundTransparency = 1
+    icon.Image = "rbxassetid://101235206534566"
+    icon.ImageColor3 = Color3.fromRGB(0, 225, 255)
+    icon.ZIndex = 101
+    icon.Parent = logoBox
+    
+    -- Smooth Dragging Support
+    local isDragging = false
+    local dragStartPos = nil
+    local frameStartPos = nil
+    local dragMoved = false
+    
+    logoBox.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+            dragStartPos = input.Position
+            frameStartPos = logoBox.Position
+            dragMoved = false
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    isDragging = false
+                end
+            end)
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStartPos
+            if math.abs(delta.X) > 4 or math.abs(delta.Y) > 4 then
+                dragMoved = true
+            end
+            logoBox.Position = UDim2.new(
+                frameStartPos.X.Scale,
+                frameStartPos.X.Offset + delta.X,
+                frameStartPos.Y.Scale,
+                frameStartPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    
+    -- Hover Animations
+    logoBox.MouseEnter:Connect(function()
+        TweenService:Create(logoBox, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = Color3.fromRGB(20, 25, 42)
+        }):Play()
+        TweenService:Create(icon, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            ImageColor3 = Color3.fromRGB(180, 245, 255)
+        }):Play()
+        TweenService:Create(glow, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            ImageTransparency = 0.40
+        }):Play()
+    end)
+    
+    logoBox.MouseLeave:Connect(function()
+        TweenService:Create(logoBox, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = Color3.fromRGB(13, 16, 26)
+        }):Play()
+        TweenService:Create(icon, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            ImageColor3 = Color3.fromRGB(0, 225, 255)
+        }):Play()
+        TweenService:Create(glow, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            ImageTransparency = 0.65
+        }):Play()
+    end)
+
+    -- Show/Hide logo box animations
+    local function showLogo()
+        if logoBox.Visible then return end
+        logoBox.Visible = true
+        logoBox.Size = UDim2.fromOffset(36, 36)
+        TweenService:Create(logoBox, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.fromOffset(50, 50)
+        }):Play()
+    end
+
+    local function hideLogo()
+        if not logoBox.Visible then return end
+        local tw = TweenService:Create(logoBox, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Size = UDim2.fromOffset(30, 30)
+        })
+        tw:Play()
+        tw.Completed:Connect(function()
+            if not logoBox.Visible then return end
+            logoBox.Visible = false
+            logoBox.Size = UDim2.fromOffset(50, 50)
+        end)
+    end
+
+    -- Reopen GUI on click
+    local function reopenGUI()
+        hideLogo()
+        pcall(function()
+            Window:Toggle()
+        end)
+    end
+
+    logoBox.MouseButton1Click:Connect(function()
+        if not dragMoved then
+            reopenGUI()
+        end
+    end)
+
+    -- Hook into WindUI Window and Minus Button
+    task.spawn(function()
+        local windowFrame = nil
+        local hasEverOpened = false
+
+        -- Wait for window frame to be created (past key validation)
+        for _ = 1, 120 do
+            pcall(function()
+                local coreGui = game:GetService("CoreGui")
+                local screenGui = (WindUI and WindUI.ScreenGui) or coreGui:FindFirstChild("WindUI", true)
+                if screenGui then
+                    local winFolder = screenGui:FindFirstChild("Window", true)
+                    if winFolder then
+                        for _, child in ipairs(winFolder:GetChildren()) do
+                            if child:IsA("Frame") and child:FindFirstChild("Main") then
+                                windowFrame = child
+                                break
+                            end
+                        end
+                        if not windowFrame then
+                            for _, child in ipairs(winFolder:GetChildren()) do
+                                if child:IsA("Frame") then
+                                    windowFrame = child
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+            if windowFrame then break end
+            task.wait(0.5)
+        end
+
+        if not windowFrame then return end
+
+        local function checkVisibility()
+            if not windowFrame then return end
+            if windowFrame.Visible then
+                hasEverOpened = true
+                hideLogo()
+            else
+                if hasEverOpened then
+                    showLogo()
+                end
+            end
+        end
+
+        windowFrame:GetPropertyChangedSignal("Visible"):Connect(checkVisibility)
+        if windowFrame.Visible then
+            hasEverOpened = true
+        end
+
+        -- Hook Topbar Minus Button
+        local function hookMinusButton()
+            pcall(function()
+                local topbar = windowFrame:FindFirstChild("Topbar", true)
+                if topbar then
+                    local right = topbar:FindFirstChild("Right")
+                    if right then
+                        for _, frame in ipairs(right:GetChildren()) do
+                            if frame:IsA("Frame") then
+                                local ib = frame:FindFirstChildWhichIsA("ImageButton")
+                                if ib then
+                                    local iconLabel = ib:FindFirstChildWhichIsA("ImageLabel", true)
+                                    if iconLabel and string.find(tostring(iconLabel.Image), "118026365011536") then
+                                        ib.MouseButton1Click:Connect(function()
+                                            task.wait(0.05)
+                                            if hasEverOpened and not windowFrame.Visible then
+                                                showLogo()
+                                            end
+                                        end)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+
+        hookMinusButton()
+        windowFrame.DescendantAdded:Connect(function(desc)
+            if desc:IsA("ImageButton") then
+                task.wait(0.1)
+                hookMinusButton()
+            end
+        end)
+    end)
+
+    return logoScreenGui
+end
+
 -- Global Keybind to toggle HUD
 UserInputService.InputBegan:Connect(function(input, processed)
     if not processed and (input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Enum.KeyCode.RightShift) then
         Window:Toggle()
     end
 end)
+
+-- Initialize Minimized Logo Box
+pcall(setupMinimizedLogoBox)
 
 -- Initialize & start background auto-update for Egg Panel and Egg ESP
 pcall(function()
@@ -3873,11 +4146,18 @@ if getgenv then
                 WeatherChangedConnection:Disconnect()
                 WeatherChangedConnection = nil
             end
+            local parentGui = (gethui and gethui()) or CoreGui:FindFirstChild("RobloxGui") or CoreGui or (LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui"))
+            if parentGui then
+                local oldLogo = parentGui:FindFirstChild("FrostHub_LogoBoxGui")
+                if oldLogo then oldLogo:Destroy() end
+            end
             if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
                 local old = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_EggPanelGui")
                 if old then old:Destroy() end
                 local oldEsp = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_ESP_Holder")
                 if oldEsp then oldEsp:Destroy() end
+                local oldLogo = LocalPlayer.PlayerGui:FindFirstChild("FrostHub_LogoBoxGui")
+                if oldLogo then oldLogo:Destroy() end
             end
             local Lighting = game:GetService("Lighting")
             local blur = Lighting:FindFirstChildOfClass("BlurEffect") or Lighting:FindFirstChild("Blur")
