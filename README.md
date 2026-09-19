@@ -84,8 +84,12 @@ The official Frost Hub Discord Bot manages community keys and announcements:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/Frost-GG-Hud/Scripts/main/AutoCollectEggs.lua"))()
 ```
 
-### 🎮 Controls
-- **Toggle Window**: Press `RightControl` or `RightShift` to show or hide the HUD.
+### 🎮 Controls & Minimized Mode
+- **Minimize Window (− Button)**: Click the **`−`** minus button in the top right corner of the title bar to minimize the GUI into a sleek, floating **Frost Hub Logo Box**.
+- **Reopen Window**: Click the floating Frost Hub logo box anytime to reopen the GUI, or press `RightControl` / `RightShift`.
+- **Draggable Logo Box**: Freely drag the floating Frost Hub logo box to any convenient position on your screen.
+- **Toggle Window (Keybind)**: Press `RightControl` or `RightShift` to show or hide the HUD.
 - **Resize Window**: Drag the bottom-right resize handle or adjust **HUD Scale** in Settings.
 - **Move Window**: Drag anywhere on the title header.
+
 
