@@ -385,14 +385,14 @@
     },
     {
       "hwid": "5424b1237977c86125d7250930c0284e16e366e2e4650b726788d2e8028edaeb",
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789838866,
       "duration": "6 hours",
       "created_at": 1789817266,
       "created_by": 1399436025188712800,
       "created_by_name": "virxw",
       "key": "FROST-6H-25P9-SD7B",
-      "status": "Active",
+      "status": "Expired",
       "claimed_by": 1399436025188712800,
       "hwid_linked_at": 1789817306,
       "hwid_user": "FREDRBB99 (2391290225)"
