@@ -451,14 +451,14 @@
       "claimed_by": 1400134127524778300
     },
     {
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789841005,
       "duration": "6 hours",
       "created_at": 1789819405,
       "created_by": 1475620425827614800,
       "created_by_name": "remarkable_kiwi_62025",
       "key": "FROST-6H-9294-4QLA",
-      "status": "Active",
+      "status": "Expired",
       "claimed_by": 1475620425827614800
     },
     {
