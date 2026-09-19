@@ -245,6 +245,18 @@
       "expired_notified": true,
       "hwid": null,
       "status": "Expired"
+    },
+    {
+      "key": "FROST-6H-56CN-VJG6",
+      "created_at": 1789808740,
+      "expires_at": 1789830340,
+      "duration": "6 hours",
+      "created_by": 1276603237612654696,
+      "created_by_name": "niktsik1",
+      "claimed_by": 1276603237612654696,
+      "expired_notified": false,
+      "hwid": null,
+      "status": "Active"
     }
   ]
 }
