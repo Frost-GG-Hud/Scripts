@@ -1054,6 +1054,18 @@
       "expired_notified": false,
       "hwid": null,
       "status": "Active"
+    },
+    {
+      "key": "FROST-6H-WYBA-RCW9",
+      "created_at": 1789838723,
+      "expires_at": 1789860323,
+      "duration": "6 hours",
+      "created_by": 1477642888061128754,
+      "created_by_name": "maizena0228_14779",
+      "claimed_by": 1477642888061128754,
+      "expired_notified": false,
+      "hwid": null,
+      "status": "Active"
     }
   ]
 }
