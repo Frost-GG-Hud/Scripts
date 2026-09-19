@@ -242,9 +242,9 @@
       "created_by": 1303832901540122656,
       "created_by_name": "cupidat",
       "claimed_by": 1303832901540122656,
-      "expired_notified": false,
+      "expired_notified": true,
       "hwid": null,
-      "status": "Active"
+      "status": "Expired"
     }
   ]
 }
