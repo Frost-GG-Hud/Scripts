@@ -61,11 +61,15 @@ A high-performance prototyping system built on [WindUI](https://github.com/Foota
     - Continuously tracks live server storms (`ServerData.ActiveWeathers`) and sends instantaneous notifications on every weather event (e.g. Thunderstorm, Volt Tempest, Raging Inferno, Dreadful Void, Eternal Storm, Gigantuar).
     - Sends dynamic alerts when weather changes between storms or when skies clear.
     - Displays granted egg mutations, storm rarity/chance, and live countdown timer until storm expiration (`<t:EndsAt:R>`).
-- **⚙️ Configuration (Save & Load System)**:
-  - Located in the **Settings** tab with dynamic status tracking (`◈ Configuration Status`).
-  - **💾 Save Config**: Serializes and saves all current settings, toggles (Auto Collect, Egg Luck filter, Egg ESP, Auto Index, Auto Rebirth, Auto Hatch Luck, Webhooks, Notifications, Noclip), thresholds, and movement speed to `FrostHub/config.json`.
-  - **📂 Load Config**: Restores and applies all saved preferences at any time with a single click, eliminating manual setup.
-  - **No Auto-Load On Rejoin**: In accordance with user preference, settings are never automatically loaded when rejoining the game—giving full control over when to load.
+- **📁 Configurations (Dedicated Management Tab)**:
+  - Completely separate tab on the sidebar for managing unlimited custom profiles independently.
+  - **◈ Configuration Overview**: Live profile inspector displaying active configuration name, profile count, disk storage status (`FrostHub/configurations.json`), and last saved timestamp.
+  - **Dropdown Profile Selector**: Instant dropdown listing all saved configuration profiles.
+  - **📂 Load Configuration**: Restores and applies all 15 active settings, sliders, toggles, filters, ESP parameters, and webhooks for the selected profile in 1 click.
+  - **💾 Create & Save Configuration**: Enter any profile name and save your complete current setup. Automatically registers in the profile manager.
+  - **✏️ Rename Configuration**: Seamlessly rename existing saved profiles with instant validation and dropdown synchronization.
+  - **🗑️ Delete Configuration**: Remove outdated configurations with automatic fallback to keep your list clean and organized.
+  - **No Auto-Load On Rejoin**: Configurations are never loaded automatically upon rejoining—giving players total control over when and what to load.
 
 
 ### 🤖 Discord Bot Commands & Key System
@@ -85,9 +89,9 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/Frost-GG-Hud/Scripts/
 ```
 
 ### 🎮 Controls & Minimized Mode
-- **Minimize Window (− Button)**: Click the **`−`** minus button in the top right corner of the title bar to minimize the GUI into a sleek, floating **Frost Hub Logo Box**.
+- **Minimize Window (− Button)**: Click the **`−`** minus button in the top right corner of the title bar to minimize the GUI into a sleek, floating **Frost Hub Logo Box** styled in the exact same matching grey color as the other GUI elements.
 - **Reopen Window**: Click the floating Frost Hub logo box anytime to reopen the GUI, or press `RightControl` / `RightShift`.
-- **Draggable Logo Box**: Freely drag the floating Frost Hub logo box to any convenient position on your screen.
+- **Draggable Logo Box**: Freely drag the floating Frost Hub logo box to any convenient position on your screen. Hover effects smoothly highlight the logo and border.
 - **Toggle Window (Keybind)**: Press `RightControl` or `RightShift` to show or hide the HUD.
 - **Resize Window**: Drag the bottom-right resize handle or adjust **HUD Scale** in Settings.
 - **Move Window**: Drag anywhere on the title header.
