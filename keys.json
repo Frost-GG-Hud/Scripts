@@ -270,6 +270,18 @@
       "expired_notified": false,
       "hwid": null,
       "status": "Active"
+    },
+    {
+      "key": "FROST-7YKB-CAVC-ZKDY",
+      "created_at": 1789811171,
+      "expires_at": 1789897571,
+      "duration": "1 Day",
+      "created_by": 1303832901540122656,
+      "created_by_name": "cupidat",
+      "assigned_to": null,
+      "assigned_to_name": null,
+      "hwid": null,
+      "status": "Active"
     }
   ]
 }
