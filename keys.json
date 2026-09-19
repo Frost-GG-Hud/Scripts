@@ -261,14 +261,14 @@
     },
     {
       "hwid": "7b30613063316163302d326133392d313165622d393737332d3830366536663665363936337d",
-      "expired_notified": false,
+      "expired_notified": true,
       "expires_at": 1789832683,
       "duration": "6 hours",
       "created_at": 1789811083,
       "created_by": 1222826590317318200,
       "created_by_name": "unknown.205",
       "key": "FROST-6H-F9F6-VQPR",
-      "status": "Active",
+      "status": "Expired",
       "claimed_by": 1222826590317318200,
       "hwid_linked_at": 1789811565,
       "hwid_user": "95117_y (3007451329)"
